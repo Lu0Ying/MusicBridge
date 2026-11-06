@@ -1,0 +1,16 @@
+{
+  "config": {
+    "apiBaseUrl": "http://127.0.0.1:18080",
+    "healthPath": "/v3/api-docs"
+  },
+  "health": {
+    "ok": true,
+    "url": "http://127.0.0.1:18080/v3/api-docs",
+    "statusCode": 200,
+    "durationMs": 4,
+    "checkedAt": "2026-11-06T14:55:51.467Z",
+    "bodyPreview": "{\"openapi\":\"3.1.0\",\"info\":{\"title\":\"MusicBridge Backend API\",\"description\":\"MusicBridge Phase 0 后端工程底座：Provider 接口、路由降级、限流缓存、调用计量与核心数据模型。Mock Provider 仅用于开发与测试。\",\"version\":\"0.1.0\"},\"servers\":[{\"url\":\"http://127.0.0.1:18080\",\"description\":\"Generated server url\"}],\"tags\":[{\"name\":\"Provider 管理\",\"descri",
+    "openapi": "3.1.0",
+    "failure": null
+  }
+}

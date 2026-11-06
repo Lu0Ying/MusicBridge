@@ -1,0 +1,13 @@
+{
+  "apiBaseUrl": "http://127.0.0.1:18080",
+  "healthPath": "/v3/api-docs",
+  "requestTimeoutMs": 8000,
+  "healthRefreshMs": 5000,
+  "backend": {
+    "cwd": "../musicbridge-backend",
+    "command": "mvnw.cmd",
+    "args": ["-q", "spring-boot:run"],
+    "envFile": ".local/backend.env.json",
+    "startupTimeoutMs": 120000
+  }
+}

@@ -116,16 +116,17 @@
 
 - 2026-11-06：新增 A-08、D-15、S-07、S-08；明确歌词边界、重试计数与最小实现边界；条目总数 58。
 - 2026-11-06（第二版）：数据库改为 MySQL 8.x；E-02、D-01/D-02/D-03/D-04/D-08/D-13/D-14 改 MySQL 口径；新增 D-16 CHECK 8.0.16+ 生效、D-17 唯一约束 NULL、D-18 utf8mb4/InnoDB/排序规则；条目总数 61；报告基线更新为第二版。
+- 2026-11-06（第三批补齐）：完成身份认证与 CORS（A-08、S-07）、授权撤销与跨用户隔离（A-05/A-07 部分通过）、trace/single-flight/并发限流（S-03/S-04/S-05）、D-15 升级对比、Maven Wrapper、git 仓库与密钥历史扫描（S-01/S-08）。
 
 ## 核对表
 
 | 编号 | 验收项 | 结果 | 证据 | 备注 |
 | --- | --- | --- | --- | --- |
-| E-01 | 可编译 | 通过 | `mvn -B -DskipTests package` → `BUILD SUCCESS`，生成 `target/musicbridge-backend-0.1.0-SNAPSHOT.jar`（2026-11-06 09:18） | — |
-| E-02 | 可启动 | 通过 | `target/app.log`：`HikariPool-1 - Start completed`（09:19:55）；Flyway `Successfully validated 2 migrations`、`Schema \`musicbridge_test\` is up to date`；`Tomcat started on port 18080`；`Started MusicBridgeApplication in 4.799 seconds`；`ERROR` 行数 0 | 连接本机 MySQL 8.4.7 |
+| E-01 | 可编译 | 通过 | `mvn -B -DskipTests package` → `BUILD SUCCESS`，生成 `target/musicbridge-backend-0.1.0-SNAPSHOT.jar`（09:18）；`.\mvnw.cmd -B clean test` 从零构建 `BUILD SUCCESS`（10:15） | — |
+| E-02 | 可启动 | 通过 | `.\mvnw.cmd -DskipTests package` 后 `java -jar ... --spring.profiles.active=local`（10:18）：`HikariPool-1 - Start completed`；Flyway `Successfully validated 3 migrations`、`Current version of schema \`musicbridge_test\`: 3`；`Tomcat started on port 8080`；`Started MusicBridgeApplication in 5.0 seconds`；本次运行 WARN/ERROR 除 Flyway 版本提示外为 0（两条 JSON 解析 WARN 由测试命令引号导致，非应用缺陷） | 连接本机 MySQL 8.4.7 |
 | E-03 | 仅本机监听 | 通过 | `netstat -ano \| findstr :18080` → `TCP 127.0.0.1:18080 0.0.0.0:0 LISTENING`（PID 20916） | 使用 `application-local.yml` 的 `server.address=127.0.0.1` |
 | E-04 | 配置齐全 | 不通过 | `application.yml` 含 datasource、Flyway、Provider 端点/密钥占位、timeout、限流参数；缓存 TTL 在 `CacheCategory` 枚举中，未外置到配置文件 | 缓存 TTL 未配置化 |
-| E-05 | 版本已实测记录 | 通过 | `java version "21.0.5"`；`Apache Maven 3.9.16`；Spring Boot 3.5.6（`pom.xml` parent） | — |
+| E-05 | 版本已实测记录 | 通过 | `java version "21.0.5"`；`Apache Maven 3.9.16`；`.\mvnw.cmd -v` → `Apache Maven 3.9.16`（Wrapper 固定版本，`distributionUrl` 指向 3.9.16）；Spring Boot 3.5.6（`pom.xml` parent） | — |
 | P-01 | 五类接口存在 | 通过 | `provider/recognition`、`metadata`、`lyrics`、`translation`、`transliteration` 各含接口；`LyricsProvider` 仅 `fetch(LyricsQuery, RequestContext)` 契约 | 歌词无业务实现 |
 | P-02 | `RecognitionRequest` 字段 | 通过 | `RecognitionRequest` record：`inputType`、`clipId`、`fingerprint`、`audioDuration`、`consentId`、`languageHint` | — |
 | P-03 | `RecognitionCandidate` 字段 | 通过 | record 含 `title`、`artists`、`album`、`duration`、`candidateReleaseHint`、`confidence`、`externalIds`、`debugReference`；无 `raw` 字段 | — |
@@ -143,9 +144,9 @@
 | M-03 | 按输入类型路由 | 通过 | `skipsProviderThatDoesNotSupportInputType`、`rawAudioFailureDoesNotFallBackToFingerprintOnlyProvider` 通过 | — |
 | M-04 | 同输入类型才可切换 | 通过 | `selectCandidates` 在启用/优先级之前按能力与输入类型过滤；跨类型 Provider 不进入候选（`skipsProviderThatDoesNotSupportInputType`） | — |
 | M-05 | RAW_AUDIO 不降级到指纹 Provider | 通过 | `rawAudioFailureDoesNotFallBackToFingerprintOnlyProvider`：raw-primary 失败后 fingerprint-only 调用数为 0 | — |
-| M-06 | 契约测试离线通过 | 通过 | `mvn -B test` → `Tests run: 25, Failures: 0, Errors: 0`，`BUILD SUCCESS`；报告在 `target/surefire-reports` | — |
-| D-01 | Flyway 空库与重复执行 | 通过 | `MySqlMigrationTest`：`clean` 后 migrate 2 个脚本；再次 migrate `migrationsExecuted=0`，`work`/`recording` 数据保留 | — |
-| D-02 | 12 张核心表存在 | 通过 | `SHOW TABLES` 输出 17 张表，含 work、recording、release、release_track、recording_relation、lyrics、lyric_line、local_media、external_ref、upload_consent、music_event、provider_call_log；`release` 在 SQL 中使用反引号 | — |
+| M-06 | 契约测试离线通过 | 通过 | `.\mvnw.cmd -B clean test` → `Tests run: 42, Failures: 0, Errors: 0, Skipped: 0`，`BUILD SUCCESS`（2026-11-06 10:15）；报告在 `target/surefire-reports` | — |
+| D-01 | Flyway 空库与重复执行 | 通过 | `MySqlMigrationTest`：`clean` 后 `Successfully applied 3 migrations ... now at version v3`；再次 migrate `migrationsExecuted=0`，`work`/`recording` 数据保留 | Flyway 11.7.2 对 MySQL 8.4 提示“支持未测试”（官方最高 8.1）；实测迁移、约束、升级均成功（见 D-15/D-16） |
+| D-02 | 12 张核心表存在 | 通过 | `SHOW TABLES` 输出 18 张表，含 12 张核心表与 `user_session`、`field_provenance`、`playlist`、`playlist_item`、`release_track` 等；`release` 在 SQL 中使用反引号 | 新增 V3 `user_session` |
 | D-03 | `work` 约束 | 通过 | `work_source_chk` 拒绝非 LOCAL 且无 `source_record_id` 的插入（`enforcesRemainingCoreConstraints`）；`mb_work_id` UNIQUE 且可空 | — |
 | D-04 | `recording` 约束 | 通过 | `work_id`/`source_record_id` NOT NULL、`version_type` 默认 ORIGINAL、`mb_recording_id` UNIQUE；`recording_version_chk` 拒绝 `INVALID`（`enforcesCoreConstraints`） | — |
 | D-05 | `release_track` 约束 | 通过 | `release_id`/`recording_id` NOT NULL；`uq_release_track_position (release_id, disc_number, track_number)` | — |
@@ -158,29 +159,29 @@
 | D-12 | `music_event` 约束 | 通过 | `music_event_type_chk` 拒绝 `BAD`；`recording_id` 可空；`uq_music_event_dedupe` | — |
 | D-13 | 不存在 `track` 表 | 通过 | 测试断言 `tableExists("track")=false`；`SHOW TABLES` 无 track | — |
 | D-14 | 关键索引 | 通过 | `schemaUsesMysqlConventionsAndKeyIndexes` 校验 idx_recording_work、idx_local_hash、idx_local_fingerprint、idx_external_ref_value、idx_consent_user、idx_lyrics_recording_kind、idx_relation_target、idx_event_user_time 均存在 | — |
-| D-15 | 数据库升级保留数据 | 不通过 | 已验证重复 migrate 不破坏；未构造“已有数据 + 新增 V3 迁移”的升级前后对比 | — |
+| D-15 | 数据库升级保留数据 | 通过 | 新增 `upgradeFromV2PreservesExistingData`：Flyway `target("2")` 建基线并写入 work/recording/external_ref/upload_consent/user_library/music_event/provider_call_log 数据 → 升级到 v3 → 7 张表行数逐表相等、`work.title` 仍为“晴天”、`external_ref` 值未变、`user_session` 新增且为 0 行；`MySqlMigrationTest` 5 项通过 | — |
 | D-16 | MySQL ≥8.0.16 且 CHECK 生效 | 通过 | `SELECT VERSION()`=8.4.7；work_source_chk、lyric_line_time_chk、recording_relation_no_self、music_event_type_chk 均拒绝非法值 | — |
 | D-17 | 唯一约束与 NULL | 通过 | `mb_work_id` 多行 NULL 允许、重复非空被拒；`dedupe_key` 多行 NULL 允许 | 其余 UNIQUE 列按 MySQL NULL 语义 |
-| D-18 | 字符集/引擎/排序规则 | 通过 | information_schema：17 表 `InnoDB` + `utf8mb4_0900_ai_ci`；`work.id`/`provider_call_log.trace_id`=`ascii_bin`；`external_ref.id_value`/`local_media.file_path`=`utf8mb4_0900_as_cs` | — |
-| A-01 | OpenAPI 可访问 | 通过 | `GET http://127.0.0.1:18080/v3/api-docs` → HTTP 200；`openapi=3.1.0`，`title=MusicBridge Backend API` | — |
+| D-18 | 字符集/引擎/排序规则 | 通过 | information_schema：18 表 `InnoDB` + `utf8mb4_0900_ai_ci`；`work.id`/`provider_call_log.trace_id`/`user_session.token_hash`=`ascii_bin`；`external_ref.id_value`/`local_media.file_path`=`utf8mb4_0900_as_cs` | — |
+| A-01 | OpenAPI 可访问 | 通过 | `GET /v3/api-docs` → HTTP 200（09:24 于 18080；10:18 于 8080 再次验证）；`openapi=3.1.0`，`title=MusicBridge Backend API` | — |
 | A-02 | DTO 与 OpenAPI 一致 | 不通过 | Work/Recording/Release/ReleaseTrack DTO 源码存在；当前 OpenAPI 只暴露 3 个 admin 端点，四层 DTO 未进入 schema | 缺业务 REST 端点 |
 | A-03 | `/clips` 接口 | 不通过 | 未实现 `/clips` multipart 接口与媒体校验 | 不在本批范围 |
 | A-04 | `/recognitions` 接口 | 不通过 | 未实现 `/recognitions` 接口 | 不在本批范围 |
-| A-05 | 归属校验 | 不通过 | 无跨用户 clipId/consentId 校验接口与测试 | — |
+| A-05 | 归属校验 | 不通过 | `crossUserConsentAccessIsIsolated`：跨用户读取/撤销 consent 返回 404、列表为空 —— consentId 部分通过；`clipId` 与 scope 不匹配返回 403 未实现（无 `/clips`） | 部分通过 |
 | A-06 | 输入校验 | 不通过 | 无 REST 输入校验实现；字段规则仅写在 DTO 注释 | — |
-| A-07 | 授权撤销流程 | 不通过 | 无撤销接口与临时片段清理流程 | — |
-| A-08 | 身份认证 | 不通过 | 无会话令牌/认证过滤器实现 | — |
-| S-01 | 仓库无真实密钥 | 通过 | 全仓扫描 `123456`、`AKIA...`、`BEGIN ... PRIVATE KEY`、非占位 `api-key:` 均无匹配；密钥为 `${AUDD_API_KEY:}` 等占位 | — |
+| A-07 | 授权撤销流程 | 不通过 | `revokedConsentCannotBeUsedForUpload`：撤销后 `verify` 返回 403、`active=false`、`revokedAt` 有值 —— 撤销后禁止上传已通过；本地临时片段清理未实现 | 部分通过 |
+| A-08 | 身份认证 | 通过 | `SecurityApiTest` 9 项通过：错误密码 401；登录后 `GET /api/v1/auth/me` 返回服务端 `local-user`（伪造 `?userId=attacker` 不生效）；缺失/无效令牌 401；`logout` 后原令牌 401；令牌仅存 SHA-256 哈希（`V3__security_session.sql`）；`localPassword` 只读环境变量 | — |
+| S-01 | 仓库无真实密钥 | 通过 | git 历史全量扫描：`git rev-list --all` + `git grep -E 'BEGIN ... PRIVATE KEY\|AKIA...'` 无命中；凭据赋值模式仅命中 `System.getenv("MYSQL_TEST_PASSWORD")` 等环境变量读取；密钥均为 `${AUDD_API_KEY:}` 占位 | — |
 | S-02 | 无真实计费调用 | 通过 | `provider_call_log` 行数 0；`provider` 下仅 `mock` 实现 | — |
-| S-03 | 限流最小实现 | 不通过 | `TokenBucketRateLimiter`/`RateLimiterRegistry`/`SharedRateLimiterStore` 已实现；缺并发测试 | — |
-| S-04 | 缓存最小实现 | 不通过 | Caffeine 缓存、TTL 矩阵、负缓存已实现；缺 single-flight 实现与单测 | — |
-| S-05 | 调用可追溯 | 不通过 | `ProviderCallLog` 含 `traceId`；无按 trace_id 查询接口，日志未持久化到数据库 | 仅内存环形记录 |
+| S-03 | 限流最小实现 | 通过 | `ConcurrencyReliabilityTest.rateLimiterBlocksConcurrentCallsBeyondBurstCapacity`：8 线程并发、`burst=1`，实际 Provider 调用 1 次、1 个成功、7 个失败（首个为 `RATE_LIMITED` 并写入调用日志） | 冷却后的请求表现为 `NO_MATCH` |
+| S-04 | 缓存最小实现 | 通过 | Caffeine 缓存、TTL 矩阵、负缓存已实现；新增 `SingleFlight.run(key, supplier)` 包裹 `ProviderManager.execute`；`singleFlightCollapsesConcurrentIdenticalRequests`：8 个同键并发请求只触发 1 次 Provider 调用，结束后在途标记清零 | — |
+| S-05 | 调用可追溯 | 通过 | `TraceFilter` 接受/生成 `X-Trace-Id` 并写入 MDC 与响应头；`RequestContext` 复用该 traceId；`GET /api/v1/admin/traces/{traceId}` 返回该链路的 Provider 调用日志；`TraceObservabilityTest` 5 项通过；运行日志实测 `INFO [trace=aa450de9-bc1c-4a32-96ff-faa31f5f5893]`、`WARN [trace=23ab8751-...]`，响应头回显 `X-Trace-Id: trace-live-001` | 日志目前为内存环形记录，未持久化到 `provider_call_log` 表 |
 | S-06 | 生产配置无 Mock | 通过 | `application-local.yml` 启用 5 个 mock；`application-remote.yml` 全部 `enabled: false`；`ProviderRegistry` 对 `prod` 环境校验 Mock 开关 | — |
-| S-07 | 本机 API 访问保护 | 不通过 | 无 CORS/Origin 白名单配置与跨源请求测试 | — |
-| S-08 | 敏感信息保护 | 不通过 | 文件级密钥扫描无可复现泄漏，启动日志无密钥；项目非 git 仓库，无法提供 `git log -S` 证据 | — |
+| S-07 | 本机 API 访问保护 | 通过 | `CorsConfig` 读 `musicbridge.security.cors.allowed-origins`：local 固定 `http://localhost:5173`、`http://127.0.0.1:5173`，remote 走 `MUSICBRIDGE_CORS_ALLOWED_ORIGINS` 且默认空；`SecurityApiTest`：允许来源返回 `Access-Control-Allow-Origin`，`http://evil.example` 被 403 拒绝，预检 200；运行实例实测允许来源 `ACAO=http://localhost:5173`、`Access-Control-Expose-Headers: X-Trace-Id`，`evil.example` → 403 | — |
+| S-08 | 敏感信息保护 | 通过 | git 仓库已建立（`c:\Users\联想电脑\Desktop\SOA\项目`，提交 `9d04bd6`、`2f23a5c`）；`git rev-list --all` + `git grep` 扫描私钥/AKIA 无命中；`git log -S` 全历史中 123456 仅命中验收文档自述文字，无任何配置文件或脚本；`.gitignore` 排除 `.env*`、`application-local.yml`（保留无密钥的开发 profile）、`*.pem/*.key/*.p12/*.jks`、`secrets/` | 本机口令仅经运行时环境变量传入 |
 | N-01 | 不含桌面客户端 | 通过 | 工程仅后端；无 `package.json`、Electron 或前端目录 | — |
 | N-02 | 不含歌词业务 | 通过 | 仅 `lyrics`/`lyric_line` 表与 `LyricsProvider` 接口；无 LRC 解析、翻译、音译实现 | — |
 | N-03 | 不含音频采集 | 通过 | 代码中无系统回环、麦克风、静音检测实现 | — |
 | N-04 | 不含真实 Provider 接入 | 通过 | 仅 Mock Provider 与配置占位；无真实第三方调用 | — |
 
-> 本表证据采集时间：2026-11-06 09:24（Asia/Shanghai）。通过 45 项，不通过 16 项；不通过项均标注缺口，未以“代码存在”替代可复现证据。
+> 本表证据采集时间：2026-11-06 10:20（Asia/Shanghai）。通过 52 项，不通过 9 项；不通过项均标注缺口，未以“代码存在”替代可复现证据。

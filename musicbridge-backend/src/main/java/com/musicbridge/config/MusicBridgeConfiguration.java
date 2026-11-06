@@ -2,8 +2,10 @@ package com.musicbridge.config;
 
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.servers.Server;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 import java.time.Clock;
 
@@ -12,6 +14,12 @@ import java.time.Clock;
  */
 @Configuration
 public class MusicBridgeConfiguration {
+
+    private final Environment environment;
+
+    public MusicBridgeConfiguration(Environment environment) {
+        this.environment = environment;
+    }
 
     @Bean
     public Clock clock() {
@@ -26,10 +34,16 @@ public class MusicBridgeConfiguration {
 
     @Bean
     public OpenAPI musicBridgeOpenApi() {
+        // 文档中的服务地址与实际监听地址/端口保持一致，便于桌面端直接复用
+        String address = environment.getProperty("server.address", "127.0.0.1");
+        String port = environment.getProperty("server.port", "18080");
         return new OpenAPI().info(new Info()
-                .title("MusicBridge Backend API")
-                .version("0.1.0")
-                .description("MusicBridge Phase 0 后端工程底座：Provider 接口、路由降级、"
-                        + "限流缓存、调用计量与核心数据模型。Mock Provider 仅用于开发与测试。"));
+                        .title("MusicBridge Backend API")
+                        .version("0.1.0")
+                        .description("MusicBridge Phase 0 后端工程底座：Provider 接口、路由降级、"
+                                + "限流缓存、调用计量与核心数据模型。Mock Provider 仅用于开发与测试。"))
+                .addServersItem(new Server()
+                        .url("http://" + address + ":" + port)
+                        .description("本机后端"));
     }
 }

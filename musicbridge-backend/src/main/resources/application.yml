@@ -17,7 +17,10 @@ spring:
     default-property-inclusion: non_null
 
 server:
-  port: ${MB_SERVER_PORT:8080}
+  # 仅监听本机回环地址，禁止绑定任意网卡
+  address: 127.0.0.1
+  # 默认端口与桌面端 API Base URL 保持一致，可用环境变量覆盖
+  port: ${MB_SERVER_PORT:18080}
 
 springdoc:
   api-docs:

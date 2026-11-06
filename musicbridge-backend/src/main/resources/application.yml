@@ -31,6 +31,19 @@ logging:
     level: "%5p [trace=%X{traceId:-none}]"
 
 musicbridge:
+  cache:
+    # 缓存 TTL 矩阵（外置配置，未配置项回落到 CacheCategory 默认值）
+    max-retention: 200d
+    ttl:
+      metadata: 7d
+      cover: 30d
+      lyrics-plain: 30d
+      lyrics-synced: 90d
+      translation: 90d
+      transliteration: 180d
+      recognition: 24h
+      search: 1h
+      negative: 20m
   security:
     # 单机最小认证：账号密码只走环境变量，密码为空时登录不可用
     local-user-id: ${MUSICBRIDGE_LOCAL_USER_ID:local-user}

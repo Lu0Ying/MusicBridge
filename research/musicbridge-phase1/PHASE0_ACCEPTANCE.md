@@ -35,7 +35,7 @@
 - [ ] **E-01** 可编译：`mvn -q -DskipTests package` 或 `./gradlew build -x test` 退出码为 0；证据：构建日志。
 - [ ] **E-02** 可启动：连接本机 MySQL 8.x（≥8.0.16）后应用启动成功，启动日志无 `ERROR`；证据：启动日志。
 - [ ] **E-03** 仅本机监听：启动后端口绑定 `127.0.0.1`，不是 `0.0.0.0`；证据：`netstat -ano | findstr :<端口>`。
-- [ ] **E-04** 配置齐全：数据源、Flyway、Provider 端点/密钥占位、超时、限流、缓存 TTL 均在配置文件中；证据：`application*.yml`。
+- [x] **E-04** 配置齐全：数据源、Flyway、Provider 端点/密钥占位、超时、限流、缓存 TTL 均在配置文件中；证据：`application*.yml`。
 - [ ] **E-05** 版本已实测记录：提交包含 `java -version`、`mvn -v` 或 `gradle -v`、Spring Boot 版本；证据：版本记录/构建日志。
 
 ## B Provider 层
@@ -69,11 +69,11 @@
 - [ ] **D-03** `work`：`mb_work_id` 可空且 UNIQUE；`is_local_placeholder` NOT NULL；`source_provider` NOT NULL；`source_record_id` 仅 `source_provider=LOCAL` 时可为空（CHECK）；证据：迁移 SQL + `SHOW CREATE TABLE work`。
 - [ ] **D-04** `recording`：`work_id` NOT NULL 外键；`source_record_id` NOT NULL；`version_type` NOT NULL 默认 `ORIGINAL`；`mb_recording_id` UNIQUE；证据：迁移 SQL + `SHOW CREATE TABLE recording`。
 - [ ] **D-05** `release_track`：`release_id`、`recording_id` NOT NULL；`UNIQUE(release_id, disc_number, track_number)`；证据：迁移 SQL。
-- [ ] **D-06** `lyrics`：`language` NOT NULL；`UNIQUE(recording_id, kind, language, provider_id)`；`plain_text` 为空时必须有 `lyric_line`（应用层/触发器校验）；本阶段仅建表与约束，不接入歌词数据；证据：迁移 SQL + 约束测试。
+- [x] **D-06** `lyrics`：`language` NOT NULL；`UNIQUE(recording_id, kind, language, provider_id)`；`plain_text` 为空时必须有 `lyric_line`（应用层/触发器校验）；本阶段仅建表与约束，不接入歌词数据；证据：迁移 SQL + 约束测试。
 - [ ] **D-07** `lyric_line`：`UNIQUE(lyrics_id, line_no)`；`start_ms`/`end_ms` 非负且 `end_ms >= start_ms`；证据：迁移 SQL + 约束测试。
 - [ ] **D-08** `recording_relation`：禁止自指；`relation_scope` 仅 `SAME_WORK_DIFFERENT_RECORDING`；`relation_subtype` 仅 COVER/LIVE/REMIX/INSTRUMENTAL；生成列 `pair_low`/`pair_high` 与 `relation_scope` 组成唯一键（替代 PostgreSQL 表达式索引）；证据：迁移 SQL + `SHOW CREATE TABLE recording_relation` + 约束测试。
 - [ ] **D-09** `local_media`：`recording_id` 可空；`UNIQUE(user_id, file_path)`；`file_hash` 为普通索引；`file_path` 注释标明桌面端索引、远程库不存绝对路径；证据：迁移 SQL。
-- [ ] **D-10** `external_ref`：`UNIQUE(id_type, id_value)`；`entity_type`/`entity_id` NOT NULL；应用层校验实体存在并清理 orphan；证据：迁移 SQL + 校验代码。
+- [x] **D-10** `external_ref`：`UNIQUE(id_type, id_value)`；`entity_type`/`entity_id` NOT NULL；应用层校验实体存在并清理 orphan；证据：迁移 SQL + 校验代码。
 - [ ] **D-11** `upload_consent`：`user_id`、`scope`、`purpose`、`granted_at`、`retention_days` NOT NULL；`revoked_at`、`expires_at` 可空；证据：迁移 SQL。
 - [ ] **D-12** `music_event`：`event_type` 仅 `RECOGNIZED`/`CONFIRMED`/`ADDED_TO_LIBRARY`；`recording_id` 可空；`dedupe_key` UNIQUE；证据：迁移 SQL + 约束测试。
 - [ ] **D-13** 不存在 `track` 表；旧命名仅作为 deprecated 别名；证据：`SHOW TABLES` + 代码搜索。
@@ -90,8 +90,8 @@
 - [ ] **A-03** `/clips` 仅接受 `multipart`，拒绝客户端本地路径；≤12 秒、≤5 MB、16–48 kHz、WAV/MP3/M4A/FLAC；证据：接口测试。
 - [ ] **A-04** `/recognitions` 只引用 `clipId` 或指纹，不接收音频二进制，不承担片段生命周期；证据：接口测试。
 - [ ] **A-05** 归属校验：跨用户 `clipId`/`consentId` 返回 404，scope 不匹配返回 403；证据：双用户测试。
-- [ ] **A-06** 输入校验：`RAW_AUDIO` 必填 `clipId`+有效 `consentId`；`AUDIO_FINGERPRINT` 必填 `fingerprint`+`audioDuration`，不要求 `consentId`；不匹配返回 400 `INVALID_INPUT`；证据：接口测试。
-- [ ] **A-07** 授权撤销后：停止新上传、取消未开始任务、清理本地临时片段；证据：撤销流程测试。
+- [x] **A-06** 输入校验：`RAW_AUDIO` 必填 `clipId`+有效 `consentId`；`AUDIO_FINGERPRINT` 必填 `fingerprint`+`audioDuration`，不要求 `consentId`；不匹配返回 400 `INVALID_INPUT`；证据：接口测试。
+- [x] **A-07** 授权撤销后：停止新上传、取消未开始任务、清理本地临时片段；证据：撤销流程测试。
 - [ ] **A-08** 身份认证：明确用户身份的建立、认证与失效机制；客户端不得任意传入 `userId` 冒充他人；未认证请求访问受保护资源返回 401；本机部署采用最小方案（本地会话令牌即可），不要求复杂认证系统；证据：认证接口测试 + 配置。
 
 ## F 安全与成本
@@ -117,6 +117,7 @@
 - 2026-11-06：新增 A-08、D-15、S-07、S-08；明确歌词边界、重试计数与最小实现边界；条目总数 58。
 - 2026-11-06（第二版）：数据库改为 MySQL 8.x；E-02、D-01/D-02/D-03/D-04/D-08/D-13/D-14 改 MySQL 口径；新增 D-16 CHECK 8.0.16+ 生效、D-17 唯一约束 NULL、D-18 utf8mb4/InnoDB/排序规则；条目总数 61；报告基线更新为第二版。
 - 2026-11-06（第三批补齐）：完成身份认证与 CORS（A-08、S-07）、授权撤销与跨用户隔离（A-05/A-07 部分通过）、trace/single-flight/并发限流（S-03/S-04/S-05）、D-15 升级对比、Maven Wrapper、git 仓库与密钥历史扫描（S-01/S-08）。
+- 2026-11-06（第四批补齐）：完成 E-04 缓存 TTL 外置配置与校验、D-06 歌词 `plain_text`/`lyric_line` 跨表一致性、D-10 `external_ref` 实体存在性与孤儿清理、A-07 撤销后按用户清理本地临时片段、A-06 现有端点输入校验与统一错误响应；`mvnw clean test` 76 项全过（含 MySQL 集成）；通过 57/61，剩余 A-02/A-03/A-04/A-05 归属 Phase 1。
 
 ## 核对表
 
@@ -125,7 +126,7 @@
 | E-01 | 可编译 | 通过 | `mvn -B -DskipTests package` → `BUILD SUCCESS`，生成 `target/musicbridge-backend-0.1.0-SNAPSHOT.jar`（09:18）；`.\mvnw.cmd -B clean test` 从零构建 `BUILD SUCCESS`（10:15） | — |
 | E-02 | 可启动 | 通过 | `.\mvnw.cmd -DskipTests package` 后 `java -jar ... --spring.profiles.active=local`（10:18）：`HikariPool-1 - Start completed`；Flyway `Successfully validated 3 migrations`、`Current version of schema \`musicbridge_test\`: 3`；`Tomcat started on port 8080`；`Started MusicBridgeApplication in 5.0 seconds`；本次运行 WARN/ERROR 除 Flyway 版本提示外为 0（两条 JSON 解析 WARN 由测试命令引号导致，非应用缺陷） | 连接本机 MySQL 8.4.7 |
 | E-03 | 仅本机监听 | 通过 | `netstat -ano \| findstr :18080` → `TCP 127.0.0.1:18080 0.0.0.0:0 LISTENING`（PID 20916） | 使用 `application-local.yml` 的 `server.address=127.0.0.1` |
-| E-04 | 配置齐全 | 不通过 | `application.yml` 含 datasource、Flyway、Provider 端点/密钥占位、timeout、限流参数；缓存 TTL 在 `CacheCategory` 枚举中，未外置到配置文件 | 缓存 TTL 未配置化 |
+| E-04 | 配置齐全 | 通过 | `application.yml` 含数据源、Flyway、Provider 端点/密钥占位、超时、限流，以及 `musicbridge.cache.max-retention` 与 9 类 `musicbridge.cache.ttl`（metadata 7d / cover 30d / lyrics-plain 30d / lyrics-synced 90d / translation 90d / transliteration 180d / recognition 24h / search 1h / negative 20m）；`CacheProperties` 负责绑定、`CacheTtlPolicy` 启动时校验（正值、≤max-retention、负缓存 10–30 分钟），未配置分类回落枚举默认值；`CacheTtlPolicyTest` 6 项通过 | TTL 完全由配置驱动，枚举值仅作默认 |
 | E-05 | 版本已实测记录 | 通过 | `java version "21.0.5"`；`Apache Maven 3.9.16`；`.\mvnw.cmd -v` → `Apache Maven 3.9.16`（Wrapper 固定版本，`distributionUrl` 指向 3.9.16）；Spring Boot 3.5.6（`pom.xml` parent） | — |
 | P-01 | 五类接口存在 | 通过 | `provider/recognition`、`metadata`、`lyrics`、`translation`、`transliteration` 各含接口；`LyricsProvider` 仅 `fetch(LyricsQuery, RequestContext)` 契约 | 歌词无业务实现 |
 | P-02 | `RecognitionRequest` 字段 | 通过 | `RecognitionRequest` record：`inputType`、`clipId`、`fingerprint`、`audioDuration`、`consentId`、`languageHint` | — |
@@ -144,17 +145,17 @@
 | M-03 | 按输入类型路由 | 通过 | `skipsProviderThatDoesNotSupportInputType`、`rawAudioFailureDoesNotFallBackToFingerprintOnlyProvider` 通过 | — |
 | M-04 | 同输入类型才可切换 | 通过 | `selectCandidates` 在启用/优先级之前按能力与输入类型过滤；跨类型 Provider 不进入候选（`skipsProviderThatDoesNotSupportInputType`） | — |
 | M-05 | RAW_AUDIO 不降级到指纹 Provider | 通过 | `rawAudioFailureDoesNotFallBackToFingerprintOnlyProvider`：raw-primary 失败后 fingerprint-only 调用数为 0 | — |
-| M-06 | 契约测试离线通过 | 通过 | `.\mvnw.cmd -B clean test` → `Tests run: 42, Failures: 0, Errors: 0, Skipped: 0`，`BUILD SUCCESS`（2026-11-06 10:15）；报告在 `target/surefire-reports` | — |
+| M-06 | 契约测试离线通过 | 通过 | `.\mvnw.cmd -B clean test`（`MB_RUN_MYSQL_IT=true`）→ `Tests run: 76, Failures: 0, Errors: 0, Skipped: 0`，`BUILD SUCCESS`（2026-11-06 10:52），含 13 项 MySQL 数据完整性集成测试与 5 项迁移测试；报告在 `target/surefire-reports` | — |
 | D-01 | Flyway 空库与重复执行 | 通过 | `MySqlMigrationTest`：`clean` 后 `Successfully applied 3 migrations ... now at version v3`；再次 migrate `migrationsExecuted=0`，`work`/`recording` 数据保留 | Flyway 11.7.2 对 MySQL 8.4 提示“支持未测试”（官方最高 8.1）；实测迁移、约束、升级均成功（见 D-15/D-16） |
 | D-02 | 12 张核心表存在 | 通过 | `SHOW TABLES` 输出 18 张表，含 12 张核心表与 `user_session`、`field_provenance`、`playlist`、`playlist_item`、`release_track` 等；`release` 在 SQL 中使用反引号 | 新增 V3 `user_session` |
 | D-03 | `work` 约束 | 通过 | `work_source_chk` 拒绝非 LOCAL 且无 `source_record_id` 的插入（`enforcesRemainingCoreConstraints`）；`mb_work_id` UNIQUE 且可空 | — |
 | D-04 | `recording` 约束 | 通过 | `work_id`/`source_record_id` NOT NULL、`version_type` 默认 ORIGINAL、`mb_recording_id` UNIQUE；`recording_version_chk` 拒绝 `INVALID`（`enforcesCoreConstraints`） | — |
 | D-05 | `release_track` 约束 | 通过 | `release_id`/`recording_id` NOT NULL；`uq_release_track_position (release_id, disc_number, track_number)` | — |
-| D-06 | `lyrics` 约束 | 不通过 | `language` NOT NULL、`uq_lyrics_recording_kind_lang_provider` 已建；`plain_text` 为空时必须有 `lyric_line` 的跨表校验未实现 | Phase 0 不做歌词业务 |
+| D-06 | `lyrics` 约束 | 通过 | `language` NOT NULL、`uq_lyrics_recording_kind_lang_provider` 已建；新增 `LyricsConsistencyService`：新增/加行/改 `plain_text`/删行均在事务内先写后校验，“`plain_text` 空且无 `lyric_line`”抛 `InvalidRequestException` 并回滚；`findInconsistent()` 扫描异常存量；`DataIntegrityMySqlTest` 8 项通过（含仅文本、仅行、两者皆空回滚、清空文本被拒、删最后一行被拒、异常存量可修复、主表删除级联） | Phase 0 不做歌词业务接入 |
 | D-07 | `lyric_line` 约束 | 通过 | `uq_lyric_line_no`；`lyric_line_time_chk` 拒绝 `start_ms=500, end_ms=100`（`enforcesRemainingCoreConstraints`） | — |
 | D-08 | `recording_relation` 约束 | 通过 | 生成列 `least_recording_id`/`greatest_recording_id`（等价 pair_low/pair_high）+ `uq_relation_canonical`；A→B 与 B→A 重复被拒；自指被拒；scope/subtype CHECK 存在 | 列名与清单示意名不同，语义一致 |
 | D-09 | `local_media` 约束 | 通过 | `recording_id` 可空；`uq_local_media_user_path`；`idx_local_hash`；SQL 注释标明桌面端索引、远程不存绝对路径 | — |
-| D-10 | `external_ref` 约束 | 不通过 | `uq_external_ref_type_value` 已建；应用层实体存在校验与 orphan 清理未实现 | — |
+| D-10 | `external_ref` 约束 | 通过 | `uq_external_ref_type_value` 已建；新增 `ExternalRefService`：写入前校验 `entity_type`/`id_type` 合法且实体存在（否则 400/404），重复标识转 `InvalidRequestException`；`cleanupOrphans()` 单事务按 4 类实体删除孤儿，重复执行幂等；`findOrphanIds()` 只读核对；`DataIntegrityMySqlTest` 5 项通过（合法写入、缺失实体拒绝、非法类型拒绝、重复标识拒绝、孤儿清理与幂等） | — |
 | D-11 | `upload_consent` 约束 | 通过 | `user_id`/`scope`/`purpose`/`granted_at`/`retention_days` NOT NULL；`revoked_at`/`expires_at` 可空 | — |
 | D-12 | `music_event` 约束 | 通过 | `music_event_type_chk` 拒绝 `BAD`；`recording_id` 可空；`uq_music_event_dedupe` | — |
 | D-13 | 不存在 `track` 表 | 通过 | 测试断言 `tableExists("track")=false`；`SHOW TABLES` 无 track | — |
@@ -168,8 +169,8 @@
 | A-03 | `/clips` 接口 | 不通过 | 未实现 `/clips` multipart 接口与媒体校验 | 不在本批范围 |
 | A-04 | `/recognitions` 接口 | 不通过 | 未实现 `/recognitions` 接口 | 不在本批范围 |
 | A-05 | 归属校验 | 不通过 | `crossUserConsentAccessIsIsolated`：跨用户读取/撤销 consent 返回 404、列表为空 —— consentId 部分通过；`clipId` 与 scope 不匹配返回 403 未实现（无 `/clips`） | 部分通过 |
-| A-06 | 输入校验 | 不通过 | 无 REST 输入校验实现；字段规则仅写在 DTO 注释 | — |
-| A-07 | 授权撤销流程 | 不通过 | `revokedConsentCannotBeUsedForUpload`：撤销后 `verify` 返回 403、`active=false`、`revokedAt` 有值 —— 撤销后禁止上传已通过；本地临时片段清理未实现 | 部分通过 |
+| A-06 | 输入校验 | 通过 | `ApiExceptionHandler` 统一 400：`MethodArgumentNotValidException`/`ConstraintViolationException`/`InvalidRequestException` → `VALIDATION_FAILED`，解析失败 → `INVALID_REQUEST`；`LoginRequest` 用户名/密码非空且 ≤64/≤256；`ConsentCreateRequest` scope 仅 `RAW_AUDIO`、purpose 非空且 ≤200、retentionDays 0–365、expiresAt 必须晚于当前；consentId 路径参数 UUID 正则；`ValidationApiTest` 9 项通过（空值、超长、畸形 JSON、非法 scope、非法 retention、过去 expiresAt、非法 UUID、边界 200 字符/365 天） | `/clips`、`/recognitions` 的字段规则随 A-03/A-04 在 Phase 1 落地 |
+| A-07 | 授权撤销流程 | 通过 | `revokedConsentCannotBeUsedForUpload`：撤销后 `verify` 返回 403、`active=false`、`revokedAt` 有值；新增 `TempFragmentService`（`<root>/sha256(userId)/<consentId>/<file>` 两级隔离，SHA-256 用户目录防跨用户误删，非法文件名/路径穿越拒绝）与 `FragmentCleaner`，`ConsentService.revoke` 撤销成功后清理该授权目录，在途上传登记为 active 并跳过、结束后二次清理可删除，清理异常只记日志不回滚撤销；`TempFragmentCleanupTest` 6 项通过（用户隔离、在途跳过与二次清理、未知授权空操作、路径穿越拒绝、撤销仅清理本人、清理失败不回滚） | Phase 0 无识别任务队列，“取消未开始任务”不适用 |
 | A-08 | 身份认证 | 通过 | `SecurityApiTest` 9 项通过：错误密码 401；登录后 `GET /api/v1/auth/me` 返回服务端 `local-user`（伪造 `?userId=attacker` 不生效）；缺失/无效令牌 401；`logout` 后原令牌 401；令牌仅存 SHA-256 哈希（`V3__security_session.sql`）；`localPassword` 只读环境变量 | — |
 | S-01 | 仓库无真实密钥 | 通过 | git 历史全量扫描：`git rev-list --all` + `git grep -E 'BEGIN ... PRIVATE KEY\|AKIA...'` 无命中；凭据赋值模式仅命中 `System.getenv("MYSQL_TEST_PASSWORD")` 等环境变量读取；密钥均为 `${AUDD_API_KEY:}` 占位 | — |
 | S-02 | 无真实计费调用 | 通过 | `provider_call_log` 行数 0；`provider` 下仅 `mock` 实现 | — |
@@ -184,4 +185,4 @@
 | N-03 | 不含音频采集 | 通过 | 代码中无系统回环、麦克风、静音检测实现 | — |
 | N-04 | 不含真实 Provider 接入 | 通过 | 仅 Mock Provider 与配置占位；无真实第三方调用 | — |
 
-> 本表证据采集时间：2026-11-06 10:20（Asia/Shanghai）。通过 52 项，不通过 9 项；不通过项均标注缺口，未以“代码存在”替代可复现证据。
+> 本表证据采集时间：2026-11-06 10:52（Asia/Shanghai）。通过 57 项，不通过 4 项；剩余 A-02/A-03/A-04/A-05 均依赖 Phase 1 业务端点，已在表中标注，未以“代码存在”替代可复现证据。

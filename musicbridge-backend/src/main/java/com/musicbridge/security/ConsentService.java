@@ -1,5 +1,8 @@
 package com.musicbridge.security;
 
+import com.musicbridge.web.InvalidRequestException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -15,16 +18,23 @@ import java.util.UUID;
 @Service
 public class ConsentService {
 
+    private static final Logger log = LoggerFactory.getLogger(ConsentService.class);
+
     private final ConsentRepository repository;
     private final Clock clock;
+    private final FragmentCleaner fragmentCleaner;
 
-    public ConsentService(ConsentRepository repository, Clock clock) {
+    public ConsentService(ConsentRepository repository, Clock clock, FragmentCleaner fragmentCleaner) {
         this.repository = repository;
         this.clock = clock;
+        this.fragmentCleaner = fragmentCleaner;
     }
 
     public ConsentDTO create(String userId, ConsentCreateRequest request) {
         Instant now = clock.instant();
+        if (request.expiresAt() != null && !request.expiresAt().isAfter(now)) {
+            throw new InvalidRequestException("expiresAt 必须晚于当前时间");
+        }
         UploadConsentRecord record = new UploadConsentRecord(
                 UUID.randomUUID().toString(),
                 userId,
@@ -54,6 +64,12 @@ public class ConsentService {
         UploadConsentRecord existing = requireOwned(userId, id);
         if (existing.revokedAt() == null) {
             repository.revoke(id, userId, now);
+            try {
+                fragmentCleaner.cleanupForConsent(userId, id);
+            } catch (RuntimeException e) {
+                // 清理属于补偿动作，失败不得回滚授权撤销
+                log.warn("授权已撤销，但临时片段清理失败 user={} consent={}", userId, id, e);
+            }
             existing = requireOwned(userId, id);
         }
         return toDto(existing, now);
@@ -86,9 +102,17 @@ public class ConsentService {
     }
 
     public record ConsentCreateRequest(
-            @jakarta.validation.constraints.NotBlank String scope,
-            @jakarta.validation.constraints.NotBlank String purpose,
-            @jakarta.validation.constraints.Min(0) int retentionDays,
+            @jakarta.validation.constraints.NotBlank(message = "scope 不能为空")
+            @jakarta.validation.constraints.Size(max = 32, message = "scope 长度不能超过 32")
+            @jakarta.validation.constraints.Pattern(regexp = "RAW_AUDIO",
+                    message = "scope 仅支持 RAW_AUDIO")
+            String scope,
+            @jakarta.validation.constraints.NotBlank(message = "purpose 不能为空")
+            @jakarta.validation.constraints.Size(max = 200, message = "purpose 长度不能超过 200")
+            String purpose,
+            @jakarta.validation.constraints.Min(value = 0, message = "retentionDays 不能为负数")
+            @jakarta.validation.constraints.Max(value = 365, message = "retentionDays 不能超过 365")
+            int retentionDays,
             Instant expiresAt) {
     }
 

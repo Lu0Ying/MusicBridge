@@ -1,8 +1,10 @@
 package com.musicbridge.provider;
 
 import com.musicbridge.common.RequestContext;
+import com.musicbridge.config.CacheProperties;
 import com.musicbridge.config.ProviderProperties;
 import com.musicbridge.provider.cache.CacheCategory;
+import com.musicbridge.provider.cache.CacheTtlPolicy;
 import com.musicbridge.provider.cache.CaffeineProviderQueryCache;
 import com.musicbridge.provider.cache.SingleFlight;
 import com.musicbridge.provider.circuit.CircuitBreakerRegistry;
@@ -170,7 +172,9 @@ class ConcurrencyReliabilityTest {
 
     private ProviderManager buildManager(ProviderProperties properties, List<MusicProvider> providers) {
         ProviderRegistry registry = new ProviderRegistry(providers, properties, new MockEnvironment());
-        return new ProviderManager(registry, properties, new CaffeineProviderQueryCache(),
+        CacheProperties cacheProperties = new CacheProperties();
+        return new ProviderManager(registry, properties, new CaffeineProviderQueryCache(cacheProperties),
+                new CacheTtlPolicy(cacheProperties),
                 singleFlight, new RateLimiterRegistry(properties), callExecutor,
                 new CircuitBreakerRegistry(properties, clock), runtimeState, recorder,
                 new ProviderUsageStats(), new DefaultCostEstimator(properties), Sleeper.noop(), clock);

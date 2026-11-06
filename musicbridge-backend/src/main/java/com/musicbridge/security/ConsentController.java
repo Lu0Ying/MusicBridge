@@ -3,7 +3,9 @@ package com.musicbridge.security;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,8 +22,13 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/v1/consents")
+@Validated
 @Tag(name = "上传授权", description = "授权创建、查询与撤销")
 public class ConsentController {
+
+    /** 授权 ID 必须是 UUID，避免把任意字符串透传到 SQL 层 */
+    private static final String UUID_PATTERN =
+            "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
 
     private final ConsentService consentService;
 
@@ -49,7 +56,7 @@ public class ConsentController {
     @Operation(summary = "查询当前用户的上传授权")
     public ConsentService.ConsentDTO get(
             @RequestAttribute(AuthContext.REQUEST_ATTRIBUTE) AuthContext context,
-            @PathVariable String id) {
+            @PathVariable @Pattern(regexp = UUID_PATTERN, message = "授权 ID 格式非法") String id) {
         return consentService.get(context.userId(), id);
     }
 
@@ -57,7 +64,7 @@ public class ConsentController {
     @Operation(summary = "撤销上传授权")
     public ConsentService.ConsentDTO revoke(
             @RequestAttribute(AuthContext.REQUEST_ATTRIBUTE) AuthContext context,
-            @PathVariable String id) {
+            @PathVariable @Pattern(regexp = UUID_PATTERN, message = "授权 ID 格式非法") String id) {
         return consentService.revoke(context.userId(), id);
     }
 
@@ -66,7 +73,7 @@ public class ConsentController {
     @Operation(summary = "校验授权是否仍可用于上传（上传链路前置检查）")
     public void verify(
             @RequestAttribute(AuthContext.REQUEST_ATTRIBUTE) AuthContext context,
-            @PathVariable String id) {
+            @PathVariable @Pattern(regexp = UUID_PATTERN, message = "授权 ID 格式非法") String id) {
         consentService.requireActive(context.userId(), id);
     }
 }

@@ -5,10 +5,16 @@ import com.musicbridge.provider.manager.ProviderBudgetExhaustedException;
 import com.musicbridge.security.AccessForbiddenException;
 import com.musicbridge.security.ResourceNotFoundException;
 import com.musicbridge.security.UnauthenticatedException;
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.stream.Collectors;
 
 /**
  * 把 Provider 归一化错误码映射为 HTTP 状态，避免业务层重复拼装响应。
@@ -53,5 +59,44 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiError> handleNotFound(ResourceNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ApiError("NOT_FOUND", exception.getMessage(), null));
+    }
+
+    /** Bean Validation：请求体字段校验失败，统一返回 400 + 字段级说明 */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiError> handleInvalidBody(MethodArgumentNotValidException exception) {
+        String details = exception.getBindingResult().getFieldErrors().stream()
+                .map(this::describe)
+                .collect(Collectors.joining("; "));
+        return invalid(details);
+    }
+
+    /** Bean Validation：路径参数/查询参数校验失败 */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiError> handleInvalidParameter(ConstraintViolationException exception) {
+        String details = exception.getConstraintViolations().stream()
+                .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                .collect(Collectors.joining("; "));
+        return invalid(details);
+    }
+
+    @ExceptionHandler(InvalidRequestException.class)
+    public ResponseEntity<ApiError> handleInvalidRequest(InvalidRequestException exception) {
+        return invalid(exception.getMessage());
+    }
+
+    /** 请求体不是合法 JSON、字段类型不匹配等解析失败 */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> handleUnreadableBody(HttpMessageNotReadableException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError("INVALID_REQUEST", "请求体无法解析", null));
+    }
+
+    private String describe(FieldError error) {
+        return error.getField() + ": " + error.getDefaultMessage();
+    }
+
+    private ResponseEntity<ApiError> invalid(String message) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ApiError("VALIDATION_FAILED", message, null));
     }
 }

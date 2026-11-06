@@ -49,7 +49,8 @@ class SecurityApiTest {
         properties.getCors().setAllowedOrigins(List.of(ALLOWED_ORIGIN, "http://127.0.0.1:5173"));
 
         sessionService = new SessionService(new InMemorySessionRepository(), properties, clock);
-        ConsentService consentService = new ConsentService(new InMemoryConsentRepository(), clock);
+        ConsentService consentService = new ConsentService(new InMemoryConsentRepository(), clock,
+                (userId, consentId) -> FragmentCleaner.CleanupResult.empty());
 
         mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(sessionService),
                         new ConsentController(consentService))

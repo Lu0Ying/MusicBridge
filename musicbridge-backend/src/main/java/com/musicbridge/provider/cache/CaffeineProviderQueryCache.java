@@ -2,9 +2,9 @@ package com.musicbridge.provider.cache;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.musicbridge.config.CacheProperties;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
 import java.util.Optional;
 
 /**
@@ -14,13 +14,14 @@ import java.util.Optional;
 @Component
 public class CaffeineProviderQueryCache implements ProviderQueryCache {
 
-    /** 超过最长 TTL（音译 180 天）后条目无意义，统一兜底失效 */
-    private static final Duration MAX_RETENTION = Duration.ofDays(200);
+    private final Cache<String, CacheEntry> cache;
 
-    private final Cache<String, CacheEntry> cache = Caffeine.newBuilder()
-            .maximumSize(10_000)
-            .expireAfterWrite(MAX_RETENTION)
-            .build();
+    public CaffeineProviderQueryCache(CacheProperties properties) {
+        this.cache = Caffeine.newBuilder()
+                .maximumSize(10_000)
+                .expireAfterWrite(properties.getMaxRetention())
+                .build();
+    }
 
     @Override
     public Optional<CacheEntry> get(String cacheKey) {

@@ -8,6 +8,7 @@ import com.musicbridge.provider.cache.CacheCategory;
 import com.musicbridge.provider.cache.CacheEntry;
 import com.musicbridge.provider.cache.CacheKeys;
 import com.musicbridge.provider.cache.CacheOrigin;
+import com.musicbridge.provider.cache.CacheTtlPolicy;
 import com.musicbridge.provider.cache.ProviderQueryCache;
 import com.musicbridge.provider.cache.SingleFlight;
 import com.musicbridge.provider.circuit.CircuitBreaker;
@@ -68,6 +69,7 @@ public class ProviderManager {
     private final ProviderRegistry registry;
     private final ProviderProperties properties;
     private final ProviderQueryCache cache;
+    private final CacheTtlPolicy cacheTtlPolicy;
     private final SingleFlight singleFlight;
     private final RateLimiterRegistry rateLimiterRegistry;
     private final ProviderCallExecutor callExecutor;
@@ -82,6 +84,7 @@ public class ProviderManager {
     public ProviderManager(ProviderRegistry registry,
                            ProviderProperties properties,
                            ProviderQueryCache cache,
+                           CacheTtlPolicy cacheTtlPolicy,
                            SingleFlight singleFlight,
                            RateLimiterRegistry rateLimiterRegistry,
                            ProviderCallExecutor callExecutor,
@@ -95,6 +98,7 @@ public class ProviderManager {
         this.registry = registry;
         this.properties = properties;
         this.cache = cache;
+        this.cacheTtlPolicy = cacheTtlPolicy;
         this.singleFlight = singleFlight;
         this.rateLimiterRegistry = rateLimiterRegistry;
         this.callExecutor = callExecutor;
@@ -452,7 +456,7 @@ public class ProviderManager {
             return;
         }
         Instant now = clock.instant();
-        Duration ttl = task.cacheCategory().ttl();
+        Duration ttl = cacheTtlPolicy.ttlFor(task.cacheCategory());
         cache.put(new CacheEntry(task.cacheKey(), task.cacheCategory(), value,
                 new SourceRef(provider.id(), null, null, now), now,
                 now.plus(ttl), now.plus(ttl).plus(Duration.ofDays(7)),
@@ -461,7 +465,7 @@ public class ProviderManager {
 
     private <T> void cacheNegative(ProviderTask<T> task, T value) {
         Instant now = clock.instant();
-        Duration ttl = CacheCategory.NEGATIVE.ttl();
+        Duration ttl = cacheTtlPolicy.ttlFor(CacheCategory.NEGATIVE);
         cache.put(new CacheEntry(task.cacheKey(), CacheCategory.NEGATIVE, value,
                 new SourceRef("none", null, null, now), now,
                 now.plus(ttl), now.plus(ttl), CacheOrigin.PROVIDER, false, List.of(), "v1"));

@@ -11,4 +11,7 @@ public interface ProviderCallLogRecorder {
     void record(ProviderCallLog log);
 
     List<ProviderCallLog> recent(int limit);
+
+    /** 按 traceId 查询，供链路排查使用 */
+    List<ProviderCallLog> byTraceId(String traceId, int limit);
 }

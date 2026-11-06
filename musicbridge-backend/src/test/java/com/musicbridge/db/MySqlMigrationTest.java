@@ -11,6 +11,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -61,6 +62,74 @@ class MySqlMigrationTest {
         try (Connection connection = DriverManager.getConnection(url, user, password)) {
             assertEquals(1, countRows(connection, "work"), "重复迁移后原有数据必须保留");
             assertEquals(1, countRows(connection, "recording"), "重复迁移后原有数据必须保留");
+        }
+    }
+
+    /**
+     * D-15：已有数据 + 新增迁移的升级前后对比。
+     * <p>先只迁到 V2 并写入业务数据，再升级到最新版本，逐表核对行数与关键字段未被改写。</p>
+     */
+    @Test
+    void upgradeFromV2PreservesExistingData() throws Exception {
+        String url = requireEnv("MYSQL_TEST_URL");
+        String user = requireEnv("MYSQL_TEST_USER");
+        String password = System.getenv().getOrDefault("MYSQL_TEST_PASSWORD", "");
+
+        Flyway baseline = Flyway.configure()
+                .dataSource(url, user, password)
+                .locations("classpath:db/migration")
+                .cleanDisabled(false)
+                .target("2")
+                .load();
+        baseline.clean();
+        MigrateResult baselineResult = baseline.migrate();
+        assertEquals(2, baselineResult.migrationsExecuted, "基线应只执行 V1/V2");
+
+        List<String> tables = List.of("work", "recording", "external_ref", "upload_consent",
+                "user_library", "music_event", "provider_call_log");
+        Map<String, Long> before = new LinkedHashMap<>();
+        try (Connection connection = DriverManager.getConnection(url, user, password)) {
+            insertLibrarySample(connection);
+            insert(connection, "INSERT INTO external_ref "
+                            + "(id, entity_type, entity_id, id_type, id_value, source_provider) "
+                            + "VALUES (?, 'RECORDING', 'rec-a', 'ISRC', 'MOCK-ISRC-1', 'MOCK')",
+                    "ref-1");
+            insert(connection, "INSERT INTO upload_consent "
+                            + "(id, user_id, scope, purpose, granted_at, retention_days) "
+                            + "VALUES (?, 'user-1', 'RAW_AUDIO', 'recognition', NOW(3), 0)",
+                    "consent-1");
+            insert(connection, "INSERT INTO user_library (id, user_id, recording_id) "
+                    + "VALUES (?, 'user-1', 'rec-a')", "lib-1");
+            insert(connection, "INSERT INTO music_event (id, user_id, event_type, occurred_at) "
+                    + "VALUES (?, 'user-1', 'RECOGNIZED', NOW(3))", "event-1");
+            insert(connection, "INSERT INTO provider_call_log (id, provider, capability, occurred_at) "
+                    + "VALUES (?, 'mock-metadata', 'METADATA', NOW(3))", "log-1");
+
+            for (String table : tables) {
+                before.put(table, countRows(connection, table));
+            }
+            assertFalse(tableExists(connection, "user_session"), "V2 阶段不应存在会话表");
+        }
+
+        Flyway upgrade = Flyway.configure()
+                .dataSource(url, user, password)
+                .locations("classpath:db/migration")
+                .cleanDisabled(false)
+                .load();
+        MigrateResult upgradeResult = upgrade.migrate();
+        assertTrue(upgradeResult.migrationsExecuted >= 1, "应至少执行 V3 升级");
+
+        try (Connection connection = DriverManager.getConnection(url, user, password)) {
+            for (String table : tables) {
+                assertEquals(before.get(table), countRows(connection, table),
+                        "升级后行数变化: " + table);
+            }
+            assertEquals("晴天", queryString(connection,
+                    "SELECT title FROM work WHERE id = 'work-1'"), "升级不得改写既有业务数据");
+            assertEquals("MOCK-ISRC-1", queryString(connection,
+                    "SELECT id_value FROM external_ref WHERE id = 'ref-1'"));
+            assertEquals(0, countRows(connection, "user_session"), "新表应为空，不影响旧数据");
+            assertTrue(tableExists(connection, "user_session"), "升级后必须新增会话表");
         }
     }
 

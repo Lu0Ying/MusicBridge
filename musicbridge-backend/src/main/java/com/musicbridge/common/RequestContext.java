@@ -2,7 +2,6 @@ package com.musicbridge.common;
 
 import java.time.Instant;
 import java.util.Objects;
-import java.util.UUID;
 
 /**
  * 单次业务请求的调用上下文。
@@ -27,12 +26,12 @@ public final class RequestContext {
     }
 
     public static RequestContext create(String userId) {
-        return new RequestContext(UUID.randomUUID().toString(), userId,
+        return new RequestContext(TraceContext.currentOrNew(), userId,
                 new CallBudget(DEFAULT_MAX_EXTERNAL_CALLS, DEFAULT_MAX_SWITCHES), Instant.now());
     }
 
     public static RequestContext withBudget(String userId, int maxCalls, int maxSwitches) {
-        return new RequestContext(UUID.randomUUID().toString(), userId,
+        return new RequestContext(TraceContext.currentOrNew(), userId,
                 new CallBudget(maxCalls, maxSwitches), Instant.now());
     }
 

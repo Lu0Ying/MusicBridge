@@ -3,6 +3,7 @@ package com.musicbridge.provider;
 import com.musicbridge.common.RequestContext;
 import com.musicbridge.config.ProviderProperties;
 import com.musicbridge.provider.cache.CaffeineProviderQueryCache;
+import com.musicbridge.provider.cache.SingleFlight;
 import com.musicbridge.provider.circuit.CircuitBreakerRegistry;
 import com.musicbridge.provider.circuit.CircuitState;
 import com.musicbridge.provider.dto.MetadataRecord;
@@ -433,7 +434,7 @@ class ProviderManagerRoutingTest {
             circuitRegistry = new CircuitBreakerRegistry(properties, clock);
         }
         return new ProviderManager(registry, properties, new CaffeineProviderQueryCache(),
-                new RateLimiterRegistry(properties), callExecutor,
+                new SingleFlight(), new RateLimiterRegistry(properties), callExecutor,
                 circuitRegistry, runtimeState, recorder,
                 new ProviderUsageStats(), new DefaultCostEstimator(properties), Sleeper.noop(), clock);
     }

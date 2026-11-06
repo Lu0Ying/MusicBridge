@@ -39,4 +39,21 @@ public class InMemoryProviderCallLogRecorder implements ProviderCallLogRecorder 
         }
         return result;
     }
+
+    @Override
+    public List<ProviderCallLog> byTraceId(String traceId, int limit) {
+        List<ProviderCallLog> result = new ArrayList<>();
+        if (traceId == null || traceId.isBlank()) {
+            return result;
+        }
+        for (ProviderCallLog log : logs) {
+            if (traceId.equals(log.traceId())) {
+                result.add(log);
+                if (result.size() >= limit) {
+                    break;
+                }
+            }
+        }
+        return result;
+    }
 }

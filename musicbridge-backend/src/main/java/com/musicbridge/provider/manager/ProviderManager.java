@@ -9,6 +9,7 @@ import com.musicbridge.provider.cache.CacheEntry;
 import com.musicbridge.provider.cache.CacheKeys;
 import com.musicbridge.provider.cache.CacheOrigin;
 import com.musicbridge.provider.cache.ProviderQueryCache;
+import com.musicbridge.provider.cache.SingleFlight;
 import com.musicbridge.provider.circuit.CircuitBreaker;
 import com.musicbridge.provider.circuit.CircuitBreakerRegistry;
 import com.musicbridge.provider.circuit.CircuitState;
@@ -67,6 +68,7 @@ public class ProviderManager {
     private final ProviderRegistry registry;
     private final ProviderProperties properties;
     private final ProviderQueryCache cache;
+    private final SingleFlight singleFlight;
     private final RateLimiterRegistry rateLimiterRegistry;
     private final ProviderCallExecutor callExecutor;
     private final CircuitBreakerRegistry circuitRegistry;
@@ -80,6 +82,7 @@ public class ProviderManager {
     public ProviderManager(ProviderRegistry registry,
                            ProviderProperties properties,
                            ProviderQueryCache cache,
+                           SingleFlight singleFlight,
                            RateLimiterRegistry rateLimiterRegistry,
                            ProviderCallExecutor callExecutor,
                            CircuitBreakerRegistry circuitRegistry,
@@ -92,6 +95,7 @@ public class ProviderManager {
         this.registry = registry;
         this.properties = properties;
         this.cache = cache;
+        this.singleFlight = singleFlight;
         this.rateLimiterRegistry = rateLimiterRegistry;
         this.callExecutor = callExecutor;
         this.circuitRegistry = circuitRegistry;
@@ -176,6 +180,14 @@ public class ProviderManager {
     // ---------------------------------------------------------------- 核心编排
 
     public <T> T execute(ProviderTask<T> task, RequestContext ctx) {
+        if (task.cacheKey() == null) {
+            return executeSingle(task, ctx);
+        }
+        // 同一缓存键并发只执行一次，避免缓存击穿造成重复计费调用
+        return singleFlight.run(task.cacheKey(), () -> executeSingle(task, ctx));
+    }
+
+    private <T> T executeSingle(ProviderTask<T> task, RequestContext ctx) {
         Instant now = clock.instant();
         CacheEntry staleEntry = null;
         if (task.cacheKey() != null) {

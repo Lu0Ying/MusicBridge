@@ -25,6 +25,11 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
+logging:
+  pattern:
+    # traceId 由 TraceFilter 写入 MDC，日志与调用日志共用同一链路标识
+    level: "%5p [trace=%X{traceId:-none}]"
+
 musicbridge:
   security:
     # 单机最小认证：账号密码只走环境变量，密码为空时登录不可用

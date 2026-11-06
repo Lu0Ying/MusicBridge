@@ -96,6 +96,11 @@ public class TempFragmentService implements FragmentCleaner {
         return Set.copyOf(active);
     }
 
+    /** 已写入片段的受控路径（用于清理与单片段删除），同样做路径穿越校验 */
+    public Path pathFor(String userId, String consentId, String fileName) {
+        return resolve(userId, consentId, fileName);
+    }
+
     private Path resolve(String userId, String consentId, String fileName) {
         if (userId == null || userId.isBlank()) {
             throw new InvalidRequestException("userId 不能为空");

@@ -1,7 +1,7 @@
-package com.musicbridge.web.clips;
+package com.musicbridge.clips;
 
 /**
- * 片段生命周期状态（契约草案）。
+ * 片段生命周期状态。
  *
  * <p>{@code EXPIRED} 仅用于内部与清理流程，客户端读取已过期片段一律返回 404，不会看到该状态。</p>
  */

@@ -13,6 +13,7 @@ import java.time.Clock;
  * 基础设施 Bean：时钟、退避等待实现与 OpenAPI 文档信息。
  */
 @Configuration
+@org.springframework.scheduling.annotation.EnableScheduling
 public class MusicBridgeConfiguration {
 
     private final Environment environment;

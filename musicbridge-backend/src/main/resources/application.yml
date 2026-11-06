@@ -15,6 +15,11 @@ spring:
     locations: classpath:db/migration
   jackson:
     default-property-inclusion: non_null
+  servlet:
+    multipart:
+      # 容器层粗筛；业务层仍按 MultipartFile 实际字节数复核 25 MB
+      max-file-size: 25MB
+      max-request-size: 26MB
 
 server:
   # 仅监听本机回环地址，禁止绑定任意网卡
@@ -34,6 +39,14 @@ logging:
     level: "%5p [trace=%X{traceId:-none}]"
 
 musicbridge:
+  clips:
+    # 与 /clips 冻结契约一致：25 MB 实际字节、500 ms–5 分钟实测时长、每日 03:00 清理
+    max-size-bytes: 26214400
+    min-duration-ms: 500
+    max-duration-ms: 300000
+    duration-tolerance-ms: 2000
+    cleanup-cron: "0 0 3 * * *"
+    cleanup-batch-size: 200
   cache:
     # 缓存 TTL 矩阵（外置配置，未配置项回落到 CacheCategory 默认值）
     max-retention: 200d

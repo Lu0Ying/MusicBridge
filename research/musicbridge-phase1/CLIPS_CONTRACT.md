@@ -61,18 +61,22 @@
 - 实测时长 > 300000 ms → 400 `VALIDATION_FAILED`（"音频超过 5 分钟"）。
 - 无法解析时长（容器损坏、空音频流）→ 415 `UNSUPPORTED_MEDIA_TYPE`。
 - 响应中的 `durationMs` 为实测值。
+- **已知限制**：探测读取的是容器/元数据中的时长字段，不等于完整解码验证；专门伪造时长字段的文件不保证被识别或拦截。该限制同时写入探测组件注释与第三方声明，不得对外宣称可防伪造时长。
 
-### 3.3 音频探测能力（**尚未选型，需确认，不擅自加依赖**）
+### 3.3 音频探测能力（已选型：B · jaudiotagger 3.0.1）
 
-现有 `pom.xml` 无音频解析依赖（仅 web/validation/jdbc/flyway/mysql/caffeine/springdoc）。
+- 坐标 `net.jthink:jaudiotagger:3.0.1`，已在 Maven Central 核实存在（jar 约 1.1 MB，无额外传递依赖）。
+- 许可证：LGPL（POM `licenses/license/name` 为 LGPL，链接 GNU LGPL v2.1）；声明见 `musicbridge-backend/THIRD-PARTY-NOTICES.md`。
+- 封装边界：业务层只依赖 `AudioMetadataProbe` 接口，jaudiotagger API 仅出现在 `JaudiotaggerAudioMetadataProbe`；不支持标签写入。
+- 覆盖 MP3（含 Xing/VBR）、M4A、WAV、FLAC、OGG；探测失败或结果 ≤ 0/超上限一律拒绝，不使用客户端时长兜底。
 
-| 方案 | 说明 | 代价 |
+历史方案对比（决策记录）：
+
+| 方案 | 说明 | 结论 |
 | --- | --- | --- |
-| A. 手写头部解析 | 自行解析 MP3 帧头与 Xing/VBRI、M4A `mvhd`、FLAC `STREAMINFO`、OGG granule | 零新增依赖；代码量与边界用例多，需为 5 种容器各自补测试 |
-| B. `org.jaudiotagger:jaudiotagger`（推荐候选） | 覆盖 MP3/FLAC/M4A/OGG，可直接读取时长与封装格式 | 新增一个第三方 jar（**约 1 MB 级，具体体积与传递依赖需实现前实测并报备**） |
-| C. Apache Tika | 能力全但引入较大依赖树 | 体积与启动开销大，**不推荐** |
-
-本轮不添加任何依赖；实现批次开始前需你确认 A 或 B（若选 B 需同时确认新增依赖清单与体积）。
+| A. 手写头部解析 | 自行解析 MP3 帧头与 Xing/VBRI、M4A `mvhd`、FLAC `STREAMINFO`、OGG granule | 代码量与边界用例多，未采用 |
+| B. `net.jthink:jaudiotagger:3.0.1` | 覆盖五种已冻结格式，可直接读取容器时长 | **已采用**，已封装 |
+| C. Apache Tika | 能力全但引入较大依赖树 | 体积与启动开销大，不采用 |
 
 ### 3.4 上传流程（实现顺序，含竞态处理）
 
@@ -287,16 +291,18 @@ paths:
 | `spring.servlet.multipart.max-file-size` | `25MB` | 容器层粗筛，业务层仍需按实际字节复核 |
 | `spring.servlet.multipart.max-request-size` | `26MB` | 允许少量表单开销 |
 
-## 十二、契约检查清单（供确认后进入实现）
+## 十二、契约检查清单（实现批次已全部落地）
 
-- [ ] 25 MB 按文件实际字节数校验，multipart 开销不计入。
-- [ ] 服务端校验魔数/容器特征，不只信扩展名与 MIME。
-- [ ] 服务端探测实际时长并以其为准；客户端 `durationMs` 仅作提示，偏差 > 2s 拒绝。
-- [ ] 上传前校验授权与 `retentionDays ≥ 1`；写入完成前再次校验，撤销即删文件并 403。
-- [ ] `userId` 仅来自认证上下文；跨用户一律 404。
-- [ ] 存储路径固定为 `sha256(userId)/consentId/clipId.ext`。
-- [ ] 过期片段即使未物理清理也不可读取、不可用于识曲（404）。
-- [ ] 清理每日定时 + 启动补扫；幂等、可重试、不递归清空用户目录。
-- [ ] 不提供 `DELETE /api/v1/clips/{clipId}`，服务层保留 `ClipService.delete`。
-- [ ] 音频探测方案（A 手写 / B jaudiotagger）确认，若新增依赖需报备体积与传递依赖。
-- [ ] OpenAPI 实现批次补齐 413/415 映射与 schema。
+- [x] 25 MB 按文件实际字节数校验，multipart 开销不计入。
+- [x] 服务端校验魔数/容器特征，不只信扩展名与 MIME。
+- [x] 服务端探测实际时长并以其为准；客户端 `durationMs` 仅作提示，偏差 > 2s 拒绝。
+- [x] 上传前校验授权与 `retentionDays ≥ 1`；写入完成前再次校验，撤销即删文件并 403。
+- [x] `userId` 仅来自认证上下文；跨用户一律 404。
+- [x] 存储路径固定为 `sha256(userId)/consentId/clipId.ext`。
+- [x] 过期片段即使未物理清理也不可读取、不可用于识曲（404）。
+- [x] 清理每日定时 + 启动补扫；幂等、可重试、不递归清空用户目录。
+- [x] 不提供 `DELETE /api/v1/clips/{clipId}`，服务层保留 `ClipService.delete`。
+- [x] 音频探测方案 B（jaudiotagger 3.0.1）确认，依赖体积与许可证已报备。
+- [x] OpenAPI 实现批次补齐 413/415 映射与 schema。
+
+实现落点（2026-11-07）：V4 `clip` 表、`ClipController`、`ClipService`、`AudioMetadataProbe`/`JaudiotaggerAudioMetadataProbe`、`ClipCleanupScheduler`、`THIRD-PARTY-NOTICES.md`；测试覆盖五格式（含 MP3 VBR）、损坏/截断、扩展名/MIME/魔数不一致、时长边界与提示偏差。

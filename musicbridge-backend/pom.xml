@@ -58,6 +58,13 @@
             <artifactId>caffeine</artifactId>
         </dependency>
 
+        <!-- 音频元数据探测：仅用于读取容器/元数据中的时长，不做标签写入 -->
+        <dependency>
+            <groupId>net.jthink</groupId>
+            <artifactId>jaudiotagger</artifactId>
+            <version>3.0.1</version>
+        </dependency>
+
         <!-- OpenAPI 文档 -->
         <dependency>
             <groupId>org.springdoc</groupId>

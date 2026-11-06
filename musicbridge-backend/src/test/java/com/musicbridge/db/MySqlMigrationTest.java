@@ -32,7 +32,7 @@ class MySqlMigrationTest {
             "work", "recording", "release", "release_track", "music_resource", "lyrics",
             "lyric_line", "external_ref", "upload_consent", "field_provenance",
             "recording_relation", "local_media", "user_library", "playlist",
-            "playlist_item", "music_event", "provider_call_log", "user_session");
+            "playlist_item", "music_event", "provider_call_log", "user_session", "clip");
 
     @Test
     void migratesEmptySchemaAndKeepsDataOnRerun() throws Exception {

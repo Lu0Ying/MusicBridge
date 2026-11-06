@@ -1,4 +1,4 @@
-package com.musicbridge.web.clips;
+package com.musicbridge.clips;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -6,9 +6,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * 片段元数据响应（契约草案，见 research/musicbridge-phase1/CLIPS_CONTRACT.md）。
- *
- * <p>不含 userId 与存储路径等内部信息；{@code durationMs} 为服务端实测值。</p>
+ * 片段元数据响应；不含 userId 与存储路径等内部信息，{@code durationMs} 为服务端实测值。
  */
 @Schema(name = "ClipResponse", description = "片段元数据")
 public record ClipResponse(

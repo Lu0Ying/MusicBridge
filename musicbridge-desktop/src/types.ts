@@ -50,6 +50,7 @@ export interface AuthPublicStatus {
   expiresInMs: number | null;
   expiringSoon: boolean;
   encryptionAvailable: boolean;
+  persistence: 'encrypted' | 'memory';
   message: string;
 }
 

@@ -1,10 +1,13 @@
 import { safeStorage } from 'electron';
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ConfigStore } from './config';
 
 const SESSION_FILE = 'auth-session.bin';
 const EXPIRY_WARNING_MS = 24 * 60 * 60 * 1000;
+
+/** encrypted：令牌已加密落盘；memory：仅保存在主进程内存，重启后需重新登录 */
+export type SessionPersistence = 'encrypted' | 'memory';
 
 export interface AuthPublicStatus {
   authenticated: boolean;
@@ -13,6 +16,7 @@ export interface AuthPublicStatus {
   expiresInMs: number | null;
   expiringSoon: boolean;
   encryptionAvailable: boolean;
+  persistence: SessionPersistence;
   message: string;
 }
 
@@ -92,6 +96,7 @@ export class AuthManager {
   private expiresAt: string | null = null;
   private message = '未登录';
   private encryptionAvailable: boolean;
+  private persistence: SessionPersistence = 'memory';
   private readonly sessionFile: string;
 
   constructor(
@@ -131,6 +136,7 @@ export class AuthManager {
       this.token = parsed.token;
       this.userId = parsed.userId;
       this.expiresAt = parsed.expiresAt;
+      this.persistence = 'encrypted';
       this.message = '已恢复本机会话';
       this.log(`已恢复本机会话 userId=${parsed.userId}`);
     } catch (error) {
@@ -351,6 +357,7 @@ export class AuthManager {
       expiresInMs,
       expiringSoon: expiresInMs !== null && expiresInMs > 0 && expiresInMs <= EXPIRY_WARNING_MS,
       encryptionAvailable: this.encryptionAvailable,
+      persistence: this.persistence,
       message: this.message
     };
   }
@@ -362,14 +369,21 @@ export class AuthManager {
     return new Date(this.expiresAt).getTime() - Date.now();
   }
 
+  /**
+   * 加密落盘：先写临时文件再原子重命名，避免半截文件；失败时降级为内存会话并如实记录，
+   * 绝不回退为明文存储。
+   */
   private persist(): void {
     if (!this.token || !this.userId || !this.expiresAt) {
       return;
     }
+    this.encryptionAvailable = safeStorage.isEncryptionAvailable();
     if (!this.encryptionAvailable) {
-      this.log('safeStorage 不可用，令牌仅保存在内存中');
+      this.persistence = 'memory';
+      this.log('safeStorage 不可用，令牌仅保存在内存中（内存会话模式）');
       return;
     }
+    const tempFile = `${this.sessionFile}.tmp`;
     try {
       const payload: SessionState = {
         token: this.token,
@@ -377,9 +391,20 @@ export class AuthManager {
         expiresAt: this.expiresAt
       };
       const encrypted = safeStorage.encryptString(JSON.stringify(payload));
-      writeFileSync(this.sessionFile, encrypted.toString('base64'), 'utf-8');
+      writeFileSync(tempFile, encrypted.toString('base64'), { encoding: 'utf-8' });
+      renameSync(tempFile, this.sessionFile);
+      this.persistence = 'encrypted';
+      this.log(`会话已加密写入 ${SESSION_FILE}（${encrypted.length} 字节）`);
     } catch (error) {
-      this.log(`令牌持久化失败：${error instanceof Error ? error.message : String(error)}`);
+      this.persistence = 'memory';
+      try {
+        if (existsSync(tempFile)) {
+          unlinkSync(tempFile);
+        }
+      } catch {
+        // 清理临时文件失败不影响内存会话可用性
+      }
+      this.log(`令牌持久化失败，已降级为内存会话：${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -387,6 +412,7 @@ export class AuthManager {
     this.token = null;
     this.userId = null;
     this.expiresAt = null;
+    this.persistence = 'memory';
     this.message = reason;
     try {
       if (existsSync(this.sessionFile)) {

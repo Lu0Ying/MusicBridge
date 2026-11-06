@@ -412,13 +412,25 @@ export default function App(): JSX.Element {
               <div>
                 <dt>令牌持久化</dt>
                 <dd>
-                  {auth?.encryptionAvailable ? 'safeStorage 加密已启用（仅主进程可读）' : 'safeStorage 不可用，令牌仅保存在内存'}
+                  {auth?.authenticated
+                    ? auth.persistence === 'encrypted'
+                      ? 'safeStorage 加密已持久化（仅主进程可读）'
+                      : '内存会话模式（未写入磁盘）'
+                    : '未登录'}
                 </dd>
               </div>
             </dl>
+            {auth?.authenticated && auth.persistence === 'memory' ? (
+              <p className="warning">
+                {auth.encryptionAvailable
+                  ? '内存会话模式：加密会话写入磁盘失败，重启应用后需要重新登录。'
+                  : '内存会话模式：当前系统 safeStorage 不可用，令牌仅保存在内存，重启应用后需要重新登录。'}
+              </p>
+            ) : null}
             {auth?.expiringSoon ? (
               <p className="warning">会话将在 24 小时内到期，请重新登录以继续使用。</p>
             ) : null}
+            <p className="hint">会话状态：{auth?.message ?? '—'}</p>
             <div className="actions">
               <button type="button" onClick={() => void handleVerify()} disabled={busy !== ''}>
                 {busy === 'verify' ? '验证中…' : '验证会话（GET /api/v1/auth/me）'}

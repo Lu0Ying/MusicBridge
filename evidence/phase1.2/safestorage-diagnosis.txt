@@ -1,0 +1,84 @@
+Electron safeStorage EPERM 诊断与修复证据（Phase 1.2）
+采集时间：2026-11-06T17:17Z ~ 2026-11-06T17:25Z（本地 2026-11-07 01:17 ~ 01:25）
+说明：以下路径中的用户目录统一脱敏为 <USERPROFILE>，工程目录为 <WORKSPACE>；不含令牌、密码或加密数据。
+
+一、诊断结果
+1. app.getPath('userData')
+   <USERPROFILE>\AppData\Roaming\musicbridge-desktop
+   与 process.env.APPDATA 一致，运行时未被重定向（未传入 --user-data-dir 覆盖）。
+
+2. 写入是否发生在 Main Process
+   是。process.type=browser；app.getPath('userData') 在 browser 进程内解析；
+   落盘由 electron/auth.ts 的 AuthManager.persist() 直接调用 node:fs（渲染进程 sandbox=true，无 fs 能力）。
+
+3. 写入时机与 app.whenReady()
+   AuthManager 在 app.whenReady() 回调内实例化并调用 restore()，之后才创建窗口；
+   isReady() 在模块加载时为 false，whenReady 完成后为 true；
+   登录触发的写入发生在 whenReady 之后（窗口已加载完成、用户点击登录），不存在早于 whenReady 的写盘。
+
+4. safeStorage.isEncryptionAvailable()
+   true（Electron 33.4.11 / Windows 11；主进程与诊断应用均为 true）。
+
+5. 原子写入分步结果
+   前台终端启动（正常）：mkdir 目录已存在 OK；写 <USERPROFILE>\AppData\Roaming\musicbridge-desktop\auth-session.bin.tmp OK；
+   读取 tmp OK；rename(tmp -> auth-session.bin) OK；unlink 目标 OK；会话文件最终存在。
+   后台终端启动（受工具文件系统沙箱约束），同一套操作：
+   - write-tmp        FAIL EPERM: operation not permitted, open '<USERPROFILE>\AppData\Roaming\musicbridge-desktop\diagnosis-probe.tmp'
+   - rename           FAIL EPERM: operation not permitted, rename '...\diagnosis-probe.tmp' -> '...\diagnosis-probe.bin'
+   - unlink/cleanup   目标与临时文件均不存在，跳过（非删除成功）
+   应用自身在后台启动时的日志同样为：open '<USERPROFILE>\AppData\Roaming\musicbridge-desktop\auth-session.bin.tmp' -> EPERM。
+
+6. 准确失败操作与堆栈（后台终端启动，脱敏）
+   EPERM: operation not permitted, open '<USERPROFILE>\AppData\Roaming\musicbridge-desktop\diagnosis-probe.tmp'
+       at writeFileSync (node:fs:2413:20)
+       at file:///<PROBE>/mb-epm.mjs:23:25
+       at step (file:///<PROBE>/mb-epm.mjs:12:5)
+       at ModuleJob.run (node:internal/modules/esm/module_job:430:25)
+       at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:661:26)
+       at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+   EPERM: operation not permitted, rename '<USERPROFILE>\AppData\Roaming\musicbridge-desktop\diagnosis-probe.tmp' -> '<USERPROFILE>\AppData\Roaming\musicbridge-desktop\diagnosis-probe.bin'
+       at renameSync (node:fs:1012:11)
+       at file:///<PROBE>/mb-epm.mjs:24:22
+       at step (file:///<PROBE>/mb-epm.mjs:12:5)
+
+二、根因结论
+EPERM 不是应用代码、Windows ACL 或 userData 重定向导致的；是当前工具以「后台终端」方式启动进程时施加的文件系统沙箱拒绝写入
+<USERPROFILE>\AppData\Roaming\musicbridge-desktop。同一二进制、同一路径、同一段代码：前台启动成功，后台启动 EPERM。
+未使用管理员权限，未修改 AppData 权限，未关闭 Renderer 沙箱，未做明文令牌回退。
+
+三、修复方式
+1. 原子写入：先写 auth-session.bin.tmp 再 renameSync 到 auth-session.bin，避免半写文件。
+2. 新增 persistence（encrypted | memory）：只有加密文件成功落盘才标记 encrypted；safeStorage 不可用或写盘失败时标记 memory。
+3. 写盘失败清理残留 tmp，不覆盖已有会话文件，不伪造成功。
+4. 渲染进程可见「令牌持久化」一行与「内存会话模式」警告，区分「safeStorage 不可用」与「写盘失败」两种原因。
+5. 注销、过期、401 时同时清理内存状态与本地会话文件。
+
+四、逐条验证结果
+1. 登录成功
+   UI：当前用户 local-user，会话状态「登录成功」。
+   截图：<WORKSPACE>\evidence\phase1.2\window-manual-2026-11-06T17-22-40-218Z.png
+2. 加密会话文件实际写入磁盘
+   路径 <USERPROFILE>\AppData\Roaming\musicbridge-desktop\auth-session.bin，存在，204 字节；UI「safeStorage 加密已持久化（仅主进程可读）」。
+   截图：同上。
+3. 关闭并重新启动 Electron
+   关闭进程后重新启动，见日志「safeStorage 加密可用：true」「已恢复本机会话 userId=local-user」。
+   截图：<WORKSPACE>\evidence\phase1.2\window-manual-2026-11-06T17-23-09-320Z.png
+4. 重启后读取并解密有效会话
+   userId=local-user，到期时间 2026/11/14 01:22:37，会话状态「已恢复本机会话」；
+   用恢复的令牌请求 GET /api/v1/auth/me 返回 200 {"userId":"local-user","expiresAt":"2026-11-13T17:22:37.128Z"}。
+   截图：window-manual-2026-11-06T17-23-20-040Z.png
+5. 注销后旧令牌失效且本地会话文件同步清理
+   注销请求返回 HTTP 204；本地 auth-session.bin 已不存在（exists=False）；
+   注销后界面回到登录表单。
+   截图：window-manual-2026-11-06T17-23-31-314Z.png
+6. 加密不可用或写盘失败时明确显示「内存会话模式」
+   以同名目录占用 auth-session.bin 路径制造写盘失败后登录：
+   rename '...\auth-session.bin.tmp' -> '...\auth-session.bin' EPERM（目标为目录）。
+   UI：「令牌持久化 内存会话模式（未写入磁盘）」+「内存会话模式：加密会话写入磁盘失败，重启应用后需要重新登录。」，未伪装持久化成功。
+   截图：window-manual-2026-11-06T17-23-49-469Z.png
+   另：后台沙箱环境（write-tmp EPERM）下同样显示内存会话模式。
+   截图：window-manual-2026-11-06T17-17-42-145Z.png
+
+五、现场状态清理
+注销并关闭测试实例后，删除为制造失败而创建的 auth-session.bin 同名目录：exists=False；
+userData 目录无会话文件残留。

@@ -3,9 +3,9 @@ import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs
 import { join } from 'node:path';
 import type { AppConfig } from './config';
 import { ConfigStore } from './config';
-import { runHealthCheck, type HealthResult } from './health';
+import { runProbe, type ProbeResult } from './health';
 
-export type RuntimeState = 'STARTING' | 'UP' | 'DOWN' | 'STOPPING';
+export type RuntimeState = 'STARTING' | 'UP' | 'NOT_READY' | 'DOWN' | 'STOPPING';
 
 export interface RuntimeStatus {
   state: RuntimeState;
@@ -13,13 +13,16 @@ export interface RuntimeStatus {
   managedByApp: boolean;
   pid: number | null;
   checkedAt: string | null;
-  health: HealthResult | null;
+  /** /health：进程存活探测 */
+  health: ProbeResult | null;
+  /** /ready：业务就绪探测，/health 失败时跳过 */
+  ready: ProbeResult | null;
   message: string;
 }
 
 /**
- * 后端进程与健康状态监管：
- * - 周期性请求健康检查接口，结果推送给渲染进程；
+ * 后端进程与状态监管：
+ * - 先 /health 判断进程存活，再 /ready 判断业务就绪，结果推送给渲染进程；
  * - 可由桌面端按本地环境变量文件拉起/停止后端，不改后端代码。
  */
 export class BackendSupervisor {
@@ -33,6 +36,7 @@ export class BackendSupervisor {
     pid: null,
     checkedAt: null,
     health: null,
+    ready: null,
     message: '尚未检查后端状态'
   };
 
@@ -49,7 +53,8 @@ export class BackendSupervisor {
   }
 
   start(): void {
-    this.log(`健康检查路径 ${this.store.get().healthPath}，API Base URL ${this.store.get().apiBaseUrl}`);
+    const config = this.store.get();
+    this.log(`存活探测 ${config.healthPath}，就绪探测 ${config.readyPath}，API Base URL ${config.apiBaseUrl}`);
     void this.refreshThenSchedule();
   }
 
@@ -106,10 +111,8 @@ export class BackendSupervisor {
         ...this.status,
         managedByApp: false,
         pid: null,
-        state: this.status.health?.ok ? 'UP' : 'DOWN',
-        message: this.status.health?.ok
-          ? '后端已连接（外部进程）'
-          : `后端进程已退出（code=${code ?? 'null'}）`
+        state: 'DOWN',
+        message: `后端进程已退出（code=${code ?? 'null'}）`
       });
       void this.refreshThenSchedule();
     });
@@ -119,7 +122,7 @@ export class BackendSupervisor {
       state: 'STARTING',
       managedByApp: true,
       pid: child.pid ?? null,
-      message: '后端进程启动中，等待健康检查通过'
+      message: '后端进程启动中，等待存活与就绪检查'
     });
     void this.refreshThenSchedule();
     return this.status;
@@ -177,46 +180,61 @@ export class BackendSupervisor {
     this.refreshing = true;
     try {
       const config = this.store.get();
-      const health = await runHealthCheck(config);
-      const state = this.resolveState(health);
-      const message = this.describeState(state, health);
+      // 顺序固定：先存活，再就绪；存活失败时不再请求就绪端点
+      const health = await runProbe(config, config.healthPath);
+      const ready = health.ok ? await runProbe(config, config.readyPath) : null;
+      const state = this.resolveState(health, ready);
+      const message = this.describeState(state, health, ready);
       this.updateStatus({
         state,
         managedByApp: this.child !== null,
         pid: this.child?.pid ?? null,
         checkedAt: health.checkedAt,
         health,
+        ready,
         message
       });
-      this.persistHealth(config, health);
+      this.persistProbes(config, health, ready);
     } catch (error) {
-      this.log(`健康检查异常：${error instanceof Error ? error.message : String(error)}`);
+      this.log(`后端探测异常：${error instanceof Error ? error.message : String(error)}`);
     } finally {
       this.refreshing = false;
     }
   }
 
-  private resolveState(health: HealthResult): RuntimeState {
-    if (this.child) {
-      if (health.ok) {
-        return 'UP';
-      }
+  private resolveState(health: ProbeResult, ready: ProbeResult | null): RuntimeState {
+    if (this.child && !health.ok) {
       return Date.now() > this.startupDeadline ? 'DOWN' : 'STARTING';
     }
-    return health.ok ? 'UP' : 'DOWN';
+    if (!health.ok) {
+      return 'DOWN';
+    }
+    return ready?.ok ? 'UP' : 'NOT_READY';
   }
 
-  private describeState(state: RuntimeState, health: HealthResult): string {
+  private describeState(
+    state: RuntimeState,
+    health: ProbeResult,
+    ready: ProbeResult | null
+  ): string {
     if (state === 'UP') {
-      return this.child ? '后端运行中（本应用启动）' : '后端已连接（外部启动）';
+      return this.child ? '后端已就绪（本应用启动）' : '后端已就绪（外部启动）';
+    }
+    if (state === 'NOT_READY') {
+      const reason = ready?.failure?.message ?? '就绪探测未通过';
+      const detail = ready?.detail ? `（${ready.detail}）` : '';
+      return `后端存活但未就绪：${reason}${detail}`;
     }
     if (state === 'STARTING') {
-      return '后端进程启动中，等待健康检查通过';
+      return '后端进程启动中，等待存活与就绪检查';
     }
     if (this.child) {
-      return '启动超时仍未通过健康检查，请查看证据目录下的后端运行日志';
+      return '启动超时仍未通过存活检查，请查看证据目录下的后端运行日志';
     }
-    return health.failure ? `未连接：${health.failure.message}` : '未连接';
+    if (health.failure) {
+      return `后端未启动或不可达：${health.failure.message}`;
+    }
+    return '后端未启动';
   }
 
   private updateStatus(next: RuntimeStatus): void {
@@ -231,12 +249,25 @@ export class BackendSupervisor {
     this.onStatus(next);
   }
 
-  private persistHealth(config: AppConfig, health: HealthResult): void {
-    appendFileSync(join(this.evidenceDir, 'health-history.jsonl'), `${JSON.stringify(health)}\n`);
-    // 最近一次结果单独落盘并覆盖，便于验收直接查阅
+  private persistProbes(
+    config: AppConfig,
+    health: ProbeResult,
+    ready: ProbeResult | null
+  ): void {
+    const record = {
+      checkedAt: health.checkedAt,
+      config: {
+        apiBaseUrl: config.apiBaseUrl,
+        healthPath: config.healthPath,
+        readyPath: config.readyPath
+      },
+      health,
+      ready
+    };
+    appendFileSync(join(this.evidenceDir, 'probe-history.jsonl'), `${JSON.stringify(record)}\n`);
     writeFileSync(
-      join(this.evidenceDir, 'health-check.json'),
-      `${JSON.stringify({ config: { apiBaseUrl: config.apiBaseUrl, healthPath: config.healthPath }, health }, null, 2)}\n`
+      join(this.evidenceDir, 'probe-latest.json'),
+      `${JSON.stringify(record, null, 2)}\n`
     );
   }
 
@@ -245,9 +276,7 @@ export class BackendSupervisor {
       const parsed = JSON.parse(readFileSync(file, 'utf-8')) as Record<string, unknown>;
       const env: Record<string, string> = {};
       for (const [key, value] of Object.entries(parsed)) {
-        if (key === 'MYSQL_PASSWORD' && typeof value === 'string') {
-          env[key] = value;
-        } else if (typeof value === 'string' || typeof value === 'number') {
+        if (typeof value === 'string' || typeof value === 'number') {
           env[key] = String(value);
         }
       }

@@ -1,0 +1,28 @@
+{
+  "checkedAt": "2026-11-06T15:37:38.171Z",
+  "config": {
+    "apiBaseUrl": "http://127.0.0.1:18080",
+    "healthPath": "/health",
+    "readyPath": "/ready"
+  },
+  "health": {
+    "ok": true,
+    "path": "/health",
+    "url": "http://127.0.0.1:18080/health",
+    "statusCode": 200,
+    "durationMs": 2,
+    "checkedAt": "2026-11-06T15:37:38.171Z",
+    "detail": "status=UP",
+    "failure": null
+  },
+  "ready": {
+    "ok": true,
+    "path": "/ready",
+    "url": "http://127.0.0.1:18080/ready",
+    "statusCode": 200,
+    "durationMs": 4,
+    "checkedAt": "2026-11-06T15:37:38.175Z",
+    "detail": "status=UP",
+    "failure": null
+  }
+}

@@ -1,12 +1,13 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { ConfigStore } from './config';
 import { BackendSupervisor, type RuntimeStatus } from './backend';
+import { AuthManager, type AuthPublicStatus } from './auth';
 
 const appRoot = resolve(__dirname, '..');
 const projectRoot = resolve(appRoot, '..');
-const evidenceDir = join(projectRoot, 'evidence', 'phase1.1');
+const evidenceDir = join(projectRoot, 'evidence', 'phase1.2');
 mkdirSync(evidenceDir, { recursive: true });
 
 const mainLogFile = join(evidenceDir, `desktop-main-${stamp()}.log`);
@@ -23,6 +24,8 @@ function log(message: string): void {
 
 let mainWindow: BrowserWindow | null = null;
 let supervisor: BackendSupervisor | null = null;
+let authManager: AuthManager | null = null;
+let expiryTimer: NodeJS.Timeout | null = null;
 let firstUpCaptured = false;
 
 function broadcast(status: RuntimeStatus): void {
@@ -31,7 +34,14 @@ function broadcast(status: RuntimeStatus): void {
   }
   if (status.state === 'UP' && !firstUpCaptured) {
     firstUpCaptured = true;
-    setTimeout(() => void capture('window-connected'), 1000);
+    setTimeout(() => void capture('window-ready'), 1000);
+  }
+}
+
+/** 认证状态广播只携带公开字段，token 始终留在主进程 */
+function broadcastAuth(status: AuthPublicStatus): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('auth:status', status);
   }
 }
 
@@ -90,7 +100,11 @@ async function capture(tag: string): Promise<string | null> {
   }
 }
 
-function registerIpc(store: ConfigStore, supervisorRef: BackendSupervisor): void {
+function registerIpc(
+  store: ConfigStore,
+  supervisorRef: BackendSupervisor,
+  authRef: AuthManager
+): void {
   ipcMain.handle('config:get', () => store.get());
 
   ipcMain.handle('config:update-api-base-url', async (_event, raw: unknown) => {
@@ -109,24 +123,57 @@ function registerIpc(store: ConfigStore, supervisorRef: BackendSupervisor): void
   ipcMain.handle('backend:stop', () => supervisorRef.stopBackend());
   ipcMain.handle('evidence:capture', () => capture('window-manual'));
   ipcMain.handle('evidence:get-dir', () => evidenceDir);
+
+  // 认证 IPC 只返回公开状态与错误，Renderer 永远拿不到令牌
+  ipcMain.handle('auth:login', (_event, username: unknown, password: unknown) => {
+    if (typeof username !== 'string' || typeof password !== 'string') {
+      throw new Error('用户名和密码必须是字符串');
+    }
+    return authRef.login(username.trim(), password);
+  });
+  ipcMain.handle('auth:logout', () => authRef.logout());
+  ipcMain.handle('auth:status', () => authRef.getStatus());
+
+  // 业务请求按方法 + 路径精确白名单转发，令牌由主进程附加
+  ipcMain.handle('api:request', (_event, method: unknown, path: unknown) => {
+    if (typeof method !== 'string' || typeof path !== 'string') {
+      throw new Error('method 与 path 必须是字符串');
+    }
+    return authRef.request(method.toUpperCase(), path);
+  });
 }
 
 app.whenReady().then(() => {
   const store = new ConfigStore(appRoot, app.getPath('userData'));
   log(`Electron ${process.versions.electron} / Node ${process.versions.node} / Chrome ${process.versions.chrome}`);
   log(`本地覆盖配置文件 ${store.getOverrideFile()}`);
+  log(`safeStorage 加密可用：${safeStorage.isEncryptionAvailable()}`);
+
+  authManager = new AuthManager(store, app.getPath('userData'), broadcastAuth, log);
+  authManager.restore();
 
   supervisor = new BackendSupervisor(store, appRoot, evidenceDir, broadcast, log);
-  registerIpc(store, supervisor);
+  registerIpc(store, supervisor, authManager);
   createWindow();
   supervisor.start();
+
+  // 每分钟检查一次到期，过期或进入 24 小时提醒由公开状态展示
+  expiryTimer = setInterval(() => authManager?.checkExpiry(), 60 * 1000);
 });
 
 app.on('window-all-closed', () => {
+  if (expiryTimer) {
+    clearInterval(expiryTimer);
+    expiryTimer = null;
+  }
   supervisor?.shutdown();
   app.quit();
 });
 
 app.on('before-quit', () => {
+  if (expiryTimer) {
+    clearInterval(expiryTimer);
+    expiryTimer = null;
+  }
   supervisor?.shutdown();
 });

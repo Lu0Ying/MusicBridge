@@ -63,7 +63,8 @@ h1 {
   color: #8b2e2e;
 }
 
-.state-starting {
+.state-starting,
+.state-not_ready {
   color: #8a6a1f;
 }
 
@@ -90,8 +91,16 @@ h2 {
   align-items: center;
 }
 
+.field + .field {
+  margin-top: 10px;
+}
+
 .field label {
   color: #4a4a45;
+}
+
+section > button {
+  margin-top: 16px;
 }
 
 .field input {
@@ -184,7 +193,8 @@ button:disabled {
   background: #2f6b3a;
 }
 
-.marker-starting {
+.marker-starting,
+.marker-not_ready {
   background: #8a6a1f;
 }
 
@@ -201,6 +211,37 @@ button:disabled {
   padding-left: 10px;
   border-left: 2px solid #8b2e2e;
   color: #6b2323;
+  font-size: 13px;
+}
+
+.probe {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dashed #d9d9d4;
+}
+
+.probe h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a4a45;
+}
+
+.probe .facts {
+  margin-top: 10px;
+}
+
+.skipped {
+  margin: 10px 0 0;
+  color: #6b6b66;
+  font-size: 13px;
+}
+
+.warning {
+  margin: 14px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid #8a6a1f;
+  color: #6d5314;
   font-size: 13px;
 }
 

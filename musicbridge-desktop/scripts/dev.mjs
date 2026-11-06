@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const appRoot = join(here, '..');
 const projectRoot = join(appRoot, '..');
-const evidenceDir = join(projectRoot, 'evidence', 'phase1.1');
+const evidenceDir = join(projectRoot, 'evidence', 'phase1.2');
 mkdirSync(evidenceDir, { recursive: true });
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');

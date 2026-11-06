@@ -14,6 +14,7 @@ export interface BackendLaunchConfig {
 export interface AppConfig {
   apiBaseUrl: string;
   healthPath: string;
+  readyPath: string;
   requestTimeoutMs: number;
   healthRefreshMs: number;
   backend: BackendLaunchConfig;
@@ -21,7 +22,8 @@ export interface AppConfig {
 
 const FALLBACK_CONFIG: AppConfig = {
   apiBaseUrl: 'http://127.0.0.1:18080',
-  healthPath: '/v3/api-docs',
+  healthPath: '/health',
+  readyPath: '/ready',
   requestTimeoutMs: 8000,
   healthRefreshMs: 5000,
   backend: {

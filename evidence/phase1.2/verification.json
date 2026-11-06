@@ -1,0 +1,45 @@
+{
+  "phase": "1.2",
+  "scope": "认证接入 + /health、/ready 就绪检查（不包含 /clips、/recognitions、文件上传）",
+  "verifiedAt": "2026-11-06T15:40:00Z",
+  "environment": {
+    "apiBaseUrl": "http://127.0.0.1:18080",
+    "electron": "33.4.11",
+    "node": "20.18.3",
+    "chromium": "130.0.6723.191",
+    "backend": "Spring Boot 3.5.6 / Java 21 / MySQL 8.4",
+    "desktopRun": "构建产物 dist/index.html，启动参数 --disable-gpu-sandbox"
+  },
+  "checks": [
+    { "name": "typecheck", "command": "npm run typecheck", "result": "pass" },
+    { "name": "build", "command": "npm run build", "result": "pass" },
+    { "name": "health", "request": "GET /health", "httpStatus": 200, "durationMs": 4, "detail": "status=UP" },
+    { "name": "ready", "request": "GET /ready", "httpStatus": 200, "durationMs": 5, "detail": "status=UP" },
+    { "name": "login", "request": "POST /api/v1/auth/login", "httpStatus": 200, "userId": "local-user", "expiresAt": "2026-11-13T15:36:24Z" },
+    { "name": "api-request-me", "request": "GET /api/v1/auth/me 经主进程 api:request 转发", "httpStatus": 200, "rendererVisibleFields": ["userId", "expiresAt"] },
+    { "name": "logout", "request": "POST /api/v1/auth/logout", "httpStatus": 204, "localTokenCleared": true },
+    { "name": "me-after-logout", "request": "GET /api/v1/auth/me 使用已注销令牌", "httpStatus": 401 },
+    { "name": "bad-password", "request": "POST /api/v1/auth/login 错误密码", "httpStatus": 401 },
+    { "name": "backend-down", "request": "GET /health", "result": "CONNECTION_REFUSED", "uiState": "后端未启动", "readyProbe": "未执行：存活检查未通过" },
+    { "name": "expiry-warning", "condition": "MUSICBRIDGE_SESSION_TTL=1h 的会话", "result": "expiringSoon=true", "remaining": "59 分钟", "uiText": "会话将在 24 小时内到期，请重新登录以继续使用。" }
+  ],
+  "notExercised": [
+    {
+      "item": "存活但未就绪（/ready 503）",
+      "reason": "本机 MySQL 可用，/ready 返回 200；未人为破坏数据库以制造 503"
+    },
+    {
+      "item": "safeStorage 加密令牌的跨进程持久化",
+      "result": "EPERM（环境限制）",
+      "reason": "本次运行禁止 Electron 进程写入 %APPDATA%\\musicbridge-desktop，令牌降级为仅内存保存；登录、注销与 401 行为均正常",
+      "note": "safeStorage.isEncryptionAvailable() 返回 true，代码路径已实现；在正常桌面环境（非受限沙箱）下应可写入"
+    }
+  ],
+  "screenshots": {
+    "ready": "window-manual-2026-11-06T15-28-37-486Z.png",
+    "ready_detail_and_session": "window-manual-2026-11-06T15-36-33-467Z.png",
+    "authenticated": "window-manual-2026-11-06T15-36-25-857Z.png",
+    "logged_out": "window-manual-2026-11-06T15-36-49-458Z.png",
+    "backend_down": "window-manual-2026-11-06T15-32-47-925Z.png"
+  }
+}

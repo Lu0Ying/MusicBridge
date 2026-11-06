@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
-import type { AppConfig, AuthPublicStatus, ProbeResult, RuntimeStatus } from './types';
+import type {
+  AppConfig,
+  AuthPublicStatus,
+  ClipRecord,
+  ClipSelection,
+  ConsentRecord,
+  ProbeResult,
+  RuntimeStatus
+} from './types';
 
 const STATE_LABEL: Record<RuntimeStatus['state'], string> = {
   STARTING: '启动中',
@@ -42,6 +50,13 @@ function describeProbe(probe: ProbeResult | null): string {
   return probe.ok ? `HTTP ${probe.statusCode ?? '—'}（通过）` : `HTTP ${probe.statusCode ?? '无响应'}（未通过）`;
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) {
+    return '0 字节';
+  }
+  return `${bytes} 字节（${(bytes / 1048576).toFixed(2)} MB）`;
+}
+
 export default function App(): JSX.Element {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [status, setStatus] = useState<RuntimeStatus | null>(null);
@@ -55,6 +70,12 @@ export default function App(): JSX.Element {
   const [busy, setBusy] = useState('');
   const [evidenceDir, setEvidenceDir] = useState('');
   const [evidenceFile, setEvidenceFile] = useState('');
+  const [clipSelection, setClipSelection] = useState<ClipSelection | null>(null);
+  const [consent, setConsent] = useState<ConsentRecord | null>(null);
+  const [retentionDays, setRetentionDays] = useState('1');
+  const [clipBusy, setClipBusy] = useState('');
+  const [clipError, setClipError] = useState('');
+  const [clipResult, setClipResult] = useState<ClipRecord | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -73,9 +94,10 @@ export default function App(): JSX.Element {
       window.musicbridge.getConfig(),
       window.musicbridge.getStatus(),
       window.musicbridge.getEvidenceDir(),
-      window.musicbridge.getAuthStatus()
+      window.musicbridge.getAuthStatus(),
+      window.musicbridge.getClipSelection()
     ])
-      .then(([loadedConfig, loadedStatus, dir, authStatus]) => {
+      .then(([loadedConfig, loadedStatus, dir, authStatus, clipInfo]) => {
         if (!alive) {
           return;
         }
@@ -84,6 +106,7 @@ export default function App(): JSX.Element {
         setStatus(loadedStatus);
         setEvidenceDir(dir);
         setAuth(authStatus);
+        setClipSelection(clipInfo);
       })
       .catch((error: unknown) => {
         if (alive) {
@@ -155,6 +178,9 @@ export default function App(): JSX.Element {
     setBusy('logout');
     setLoginError('');
     setVerifyResult('');
+    setConsent(null);
+    setClipResult(null);
+    setClipError('');
     try {
       const outcome = await window.musicbridge.logout();
       setAuth(outcome.status);
@@ -224,6 +250,75 @@ export default function App(): JSX.Element {
       setNotice(`截图失败：${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setBusy('');
+    }
+  }
+
+  async function handleSelectClip(): Promise<void> {
+    setClipBusy('select');
+    setClipError('');
+    setClipResult(null);
+    try {
+      const selection = await window.musicbridge.selectClipFile();
+      if (selection) {
+        setClipSelection(selection);
+      }
+    } catch (error) {
+      setClipError(`选择文件失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setClipBusy('');
+    }
+  }
+
+  async function handleCreateConsent(): Promise<void> {
+    const days = Number(retentionDays);
+    if (!Number.isInteger(days) || days < 1 || days > 365) {
+      setClipError('保留天数必须是 1–365 的整数');
+      return;
+    }
+    setClipBusy('consent');
+    setClipError('');
+    setClipResult(null);
+    try {
+      const outcome = await window.musicbridge.createConsent(days);
+      setConsent(outcome.consent);
+      if (outcome.error) {
+        setClipError(`创建授权失败：${outcome.error.kind} · ${outcome.error.message}`);
+      }
+      if (outcome.unauthorized) {
+        setAuth(await window.musicbridge.getAuthStatus());
+      }
+    } catch (error) {
+      setClipError(`创建授权异常：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setClipBusy('');
+    }
+  }
+
+  async function handleUploadClip(): Promise<void> {
+    if (!consent) {
+      return;
+    }
+    setClipBusy('upload');
+    setClipError('');
+    setClipResult(null);
+    try {
+      const outcome = await window.musicbridge.uploadClip(consent.id);
+      setClipResult(outcome.clip);
+      if (outcome.error) {
+        setClipError(
+          outcome.endpointMissing
+            ? `未上传：${outcome.error.message}`
+            : `上传失败：${outcome.error.kind} · ${outcome.error.message}`
+        );
+      }
+      if (outcome.unauthorized) {
+        setConsent(null);
+        setAuth(await window.musicbridge.getAuthStatus());
+      }
+    } catch (error) {
+      setClipError(`上传异常：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setClipBusy('');
     }
   }
 
@@ -443,6 +538,166 @@ export default function App(): JSX.Element {
             <p className="hint">令牌不进入渲染进程、localStorage、日志或前端配置，业务请求由主进程附加 Bearer 头转发。</p>
           </>
         )}
+      </section>
+
+      <section>
+        <h2>文件导入（上传前置）</h2>
+        <p className="hint">
+          仅支持 MP3 / M4A / WAV / FLAC / OGG，单文件实际字节 ≤ 25 MB、时长 ≤ 5 分钟。客户端预检只做提示，
+          不代表服务端已接受，也不代表「已可识别」；是否可用完全由服务端判定。
+        </p>
+        {!authenticated ? <p className="skipped">未登录：请先在上方「本机会话」登录后再创建授权与上传。</p> : null}
+
+        <div className="actions">
+          <button type="button" onClick={() => void handleSelectClip()} disabled={busy !== '' || clipBusy !== ''}>
+            {clipBusy === 'select' ? '选择中…' : '选择音频文件'}
+          </button>
+        </div>
+
+        {clipSelection ? (
+          <>
+            <dl className="facts">
+              <div>
+                <dt>文件名</dt>
+                <dd>{clipSelection.fileName}</dd>
+              </div>
+              <div>
+                <dt>格式 / 扩展名</dt>
+                <dd>
+                  {clipSelection.format ?? '不支持'} · {clipSelection.extension || '（无）'}
+                </dd>
+              </div>
+              <div>
+                <dt>文件大小</dt>
+                <dd>{formatBytes(clipSelection.sizeBytes)}（上限 25 MB）</dd>
+              </div>
+              <div>
+                <dt>容器时长（客户端）</dt>
+                <dd>
+                  {clipSelection.durationMs !== null
+                    ? `${clipSelection.durationMs} ms`
+                    : '未能读取，将不发送 durationMs'}
+                </dd>
+              </div>
+              <div>
+                <dt>客户端预检</dt>
+                <dd>{clipSelection.accepted ? '通过（仅提示，最终以服务端判定为准）' : '已拦截，不可上传'}</dd>
+              </div>
+            </dl>
+            {clipSelection.reasons.map((reason) => (
+              <p className="failure" key={reason}>
+                {reason}
+              </p>
+            ))}
+            {clipSelection.notes.map((note) => (
+              <p className="warning" key={note}>
+                {note}
+              </p>
+            ))}
+          </>
+        ) : (
+          <p className="skipped">尚未选择文件</p>
+        )}
+
+        <div className="field">
+          <label htmlFor="retention-days">保留天数</label>
+          <input
+            id="retention-days"
+            type="number"
+            min={1}
+            max={365}
+            value={retentionDays}
+            onChange={(event) => setRetentionDays(event.target.value)}
+            disabled={!authenticated || clipBusy !== ''}
+          />
+          <button
+            type="button"
+            onClick={() => void handleCreateConsent()}
+            disabled={!authenticated || busy !== '' || clipBusy !== ''}
+          >
+            {clipBusy === 'consent' ? '创建中…' : '创建上传授权（RAW_AUDIO）'}
+          </button>
+        </div>
+
+        {consent ? (
+          <dl className="facts">
+            <div>
+              <dt>授权 ID</dt>
+              <dd>{consent.id}</dd>
+            </div>
+            <div>
+              <dt>scope</dt>
+              <dd>{consent.scope}</dd>
+            </div>
+            <div>
+              <dt>授权有效期</dt>
+              <dd>{consent.expiresAt ? formatTime(consent.expiresAt) : '未设置到期时间（撤销前有效）'}</dd>
+            </div>
+            <div>
+              <dt>保留天数</dt>
+              <dd>{consent.retentionDays} 天</dd>
+            </div>
+            <div>
+              <dt>状态</dt>
+              <dd>{consent.active ? '有效' : '不可用'}</dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="skipped">尚未创建有效授权，不满足上传前置条件。</p>
+        )}
+
+        <div className="actions">
+          <button
+            type="button"
+            onClick={() => void handleUploadClip()}
+            disabled={
+              !authenticated ||
+              busy !== '' ||
+              clipBusy !== '' ||
+              !consent?.active ||
+              !clipSelection?.accepted
+            }
+          >
+            {clipBusy === 'upload' ? '上传中…' : '上传（POST /api/v1/clips）'}
+          </button>
+        </div>
+
+        {clipResult ? (
+          <dl className="facts">
+            <div>
+              <dt>clipId</dt>
+              <dd>{clipResult.clipId}</dd>
+            </div>
+            <div>
+              <dt>格式 / 类型</dt>
+              <dd>
+                {clipResult.format} · {clipResult.contentType}
+              </dd>
+            </div>
+            <div>
+              <dt>大小</dt>
+              <dd>{formatBytes(clipResult.sizeBytes)}</dd>
+            </div>
+            <div>
+              <dt>服务端实测时长</dt>
+              <dd>{clipResult.durationMs} ms</dd>
+            </div>
+            <div>
+              <dt>到期时间</dt>
+              <dd>{clipResult.expiresAt ? formatTime(clipResult.expiresAt) : '—'}</dd>
+            </div>
+            <div>
+              <dt>状态</dt>
+              <dd>{clipResult.status}</dd>
+            </div>
+          </dl>
+        ) : null}
+
+        {clipError ? <p className="failure">{clipError}</p> : null}
+        <p className="hint">
+          文件路径与令牌只保留在主进程；上传由主进程以 multipart/form-data 转发并附加 Bearer 头，
+          `durationMs` 为可选的容器时长提示，读取失败时不传。若后端尚未提供该接口，界面会如实提示「未上传」。
+        </p>
       </section>
 
       <section>

@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { ConfigStore } from './config';
 import { BackendSupervisor, type RuntimeStatus } from './backend';
 import { AuthManager, type AuthPublicStatus } from './auth';
+import { ClipUploader } from './clips';
 
 const appRoot = resolve(__dirname, '..');
 const projectRoot = resolve(appRoot, '..');
@@ -25,6 +26,7 @@ function log(message: string): void {
 let mainWindow: BrowserWindow | null = null;
 let supervisor: BackendSupervisor | null = null;
 let authManager: AuthManager | null = null;
+let clipUploader: ClipUploader | null = null;
 let expiryTimer: NodeJS.Timeout | null = null;
 let firstUpCaptured = false;
 
@@ -103,7 +105,8 @@ async function capture(tag: string): Promise<string | null> {
 function registerIpc(
   store: ConfigStore,
   supervisorRef: BackendSupervisor,
-  authRef: AuthManager
+  authRef: AuthManager,
+  clipsRef: ClipUploader
 ): void {
   ipcMain.handle('config:get', () => store.get());
 
@@ -141,6 +144,22 @@ function registerIpc(
     }
     return authRef.request(method.toUpperCase(), path);
   });
+
+  // 文件导入：文件路径只保留在主进程，渲染进程只拿到展示用信息
+  ipcMain.handle('clip:select', () => clipsRef.selectFile(mainWindow));
+  ipcMain.handle('clip:selection', () => clipsRef.getSelection());
+  ipcMain.handle('consent:create', (_event, retentionDays: unknown) => {
+    if (typeof retentionDays !== 'number') {
+      throw new Error('保留天数必须是数字');
+    }
+    return clipsRef.createConsent(retentionDays);
+  });
+  ipcMain.handle('clip:upload', (_event, consentId: unknown) => {
+    if (typeof consentId !== 'string') {
+      throw new Error('授权 ID 必须是字符串');
+    }
+    return clipsRef.uploadClip(consentId);
+  });
 }
 
 app.whenReady().then(() => {
@@ -151,9 +170,10 @@ app.whenReady().then(() => {
 
   authManager = new AuthManager(store, app.getPath('userData'), broadcastAuth, log);
   authManager.restore();
+  clipUploader = new ClipUploader(store, authManager, log);
 
   supervisor = new BackendSupervisor(store, appRoot, evidenceDir, broadcast, log);
-  registerIpc(store, supervisor, authManager);
+  registerIpc(store, supervisor, authManager, clipUploader);
   createWindow();
   supervisor.start();
 

@@ -73,6 +73,61 @@ export interface ApiResult {
   unauthorized: boolean;
 }
 
+export type ClipFormat = 'MP3' | 'M4A' | 'WAV' | 'FLAC' | 'OGG';
+
+export interface ClipSelection {
+  fileName: string;
+  format: ClipFormat | null;
+  extension: string;
+  sizeBytes: number;
+  durationMs: number | null;
+  accepted: boolean;
+  reasons: string[];
+  notes: string[];
+}
+
+export interface ConsentRecord {
+  id: string;
+  scope: string;
+  purpose: string;
+  grantedAt: string | null;
+  expiresAt: string | null;
+  retentionDays: number;
+  active: boolean;
+}
+
+export interface ConsentOutcome {
+  ok: boolean;
+  statusCode: number | null;
+  consent: ConsentRecord | null;
+  error: AuthError | null;
+  unauthorized: boolean;
+}
+
+export interface ClipRecord {
+  clipId: string;
+  consentId: string;
+  format: string;
+  contentType: string;
+  sizeBytes: number;
+  durationMs: number;
+  fileName: string;
+  createdAt: string;
+  expiresAt: string;
+  retentionDays: number;
+  status: string;
+}
+
+export interface ClipUploadOutcome {
+  ok: boolean;
+  statusCode: number | null;
+  durationMs: number;
+  clip: ClipRecord | null;
+  error: AuthError | null;
+  unauthorized: boolean;
+  endpointMissing: boolean;
+}
+
 export interface MusicBridgeApi {
   getConfig: () => Promise<AppConfig>;
   updateApiBaseUrl: (value: string) => Promise<AppConfig>;
@@ -86,6 +141,10 @@ export interface MusicBridgeApi {
   logout: () => Promise<AuthOutcome>;
   getAuthStatus: () => Promise<AuthPublicStatus>;
   requestApi: (method: string, path: string) => Promise<ApiResult>;
+  selectClipFile: () => Promise<ClipSelection | null>;
+  getClipSelection: () => Promise<ClipSelection | null>;
+  createConsent: (retentionDays: number) => Promise<ConsentOutcome>;
+  uploadClip: (consentId: string) => Promise<ClipUploadOutcome>;
   onStatus: (callback: (status: RuntimeStatus) => void) => () => void;
   onAuthStatus: (callback: (status: AuthPublicStatus) => void) => () => void;
   versions: {

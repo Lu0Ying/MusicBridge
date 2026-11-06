@@ -150,6 +150,18 @@ export class AuthManager {
     return this.readStatus();
   }
 
+  /** 仅供主进程内的业务模块读取令牌；令牌不得进入渲染进程、日志或配置文件 */
+  getAccessToken(): string | null {
+    return this.token;
+  }
+
+  /** 业务模块收到 401 时调用，清除本地会话并按公开状态广播 */
+  invalidateSession(reason: string): void {
+    if (this.token) {
+      this.clearSession(reason);
+    }
+  }
+
   checkExpiry(): void {
     if (this.token && this.remainingMs() !== null && (this.remainingMs() as number) <= 0) {
       this.clearSession('会话已过期，请重新登录');

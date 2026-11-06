@@ -14,6 +14,11 @@ const api = {
   logout: () => ipcRenderer.invoke('auth:logout'),
   getAuthStatus: () => ipcRenderer.invoke('auth:status'),
   requestApi: (method: string, path: string) => ipcRenderer.invoke('api:request', method, path),
+  // 文件导入：路径与令牌都留在主进程，渲染进程只拿到展示信息与结果
+  selectClipFile: () => ipcRenderer.invoke('clip:select'),
+  getClipSelection: () => ipcRenderer.invoke('clip:selection'),
+  createConsent: (retentionDays: number) => ipcRenderer.invoke('consent:create', retentionDays),
+  uploadClip: (consentId: string) => ipcRenderer.invoke('clip:upload', consentId),
   onStatus: (callback: (status: unknown) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
     ipcRenderer.on('backend:status', listener);

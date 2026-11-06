@@ -1,0 +1,27 @@
+# 本机部署：后端仅绑定 127.0.0.1，数据库默认连本机 MySQL，Mock 仅在此环境启用
+server:
+  address: 127.0.0.1
+
+musicbridge:
+  security:
+    cors:
+      # 开发环境仅允许本机桌面端开发服务器
+      allowed-origins:
+        - http://localhost:5173
+        - http://127.0.0.1:5173
+  providers:
+    entries:
+      mock-recognition:
+        enabled: true
+      mock-metadata:
+        enabled: true
+      mock-lyrics:
+        enabled: true
+      mock-translation:
+        enabled: true
+      mock-transliteration:
+        enabled: true
+
+logging:
+  level:
+    com.musicbridge: INFO

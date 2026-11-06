@@ -1,0 +1,25 @@
+# 远程部署：只替换连接与监听配置，接口契约不变；生产环境禁止启用 Mock
+server:
+  address: ${MB_SERVER_ADDRESS:0.0.0.0}
+
+musicbridge:
+  security:
+    cors:
+      # 生产环境只允许部署方显式配置的来源，默认空表示拒绝全部跨源
+      allowed-origins: ${MUSICBRIDGE_CORS_ALLOWED_ORIGINS:}
+  providers:
+    entries:
+      mock-recognition:
+        enabled: false
+      mock-metadata:
+        enabled: false
+      mock-lyrics:
+        enabled: false
+      mock-translation:
+        enabled: false
+      mock-transliteration:
+        enabled: false
+
+logging:
+  level:
+    com.musicbridge: INFO

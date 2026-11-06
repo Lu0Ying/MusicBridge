@@ -1,0 +1,50 @@
+# ===== 构建产物 =====
+target/
+**/target/
+**/build/
+**/dist/
+**/out/
+*.class
+*.jar
+*.war
+*.ear
+!**/maven-wrapper.jar
+
+# ===== 依赖与缓存 =====
+node_modules/
+.cache/
+
+# ===== IDE =====
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+
+# ===== 运行日志与本地输出 =====
+*.log
+logs/
+.screenshots/
+**/surefire-reports/
+
+# ===== 本地配置与密钥（默认全部忽略）=====
+.env
+.env.*
+*.env
+application-local.yml
+application-local.yaml
+application-local.properties
+secrets/
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+
+# 例外：仓库内开发 profile 只含监听地址、CORS 白名单与 Mock 开关，不含任何密码，允许入库
+!musicbridge-backend/src/main/resources/application-local.yml
+
+# ===== 系统文件 =====
+.DS_Store
+Thumbs.db

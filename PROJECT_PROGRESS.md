@@ -74,7 +74,7 @@
 ## 二·补充、Phase 1.2 技术约定
 
 - **监听地址与端口**：后端默认 `127.0.0.1:18080`，只绑定回环地址（`server.address=127.0.0.1`，不允许任意网卡）；端口可用 `MB_SERVER_PORT` 覆盖，默认值固定 18080。桌面端 API Base URL 默认为 `http://127.0.0.1:18080`，OpenAPI `servers` 与实际监听地址一致。
-- **健康检查**：`GET /health` 免认证（白名单与 `/v3/api-docs` 同一机制），仅回环来源可访问，非回环返回 403；响应仅 `{"status":"UP","timestamp":"..."}`，不暴露版本、依赖或数据源信息；`/v3/api-docs` 职责不变。
+- **健康检查**：`GET /health` 为进程级存活探测，`GET /ready` 为业务就绪探测（新增于 Phase 1.2 第二批）。两者均免认证（白名单与 `/v3/api-docs` 同一机制），仅回环来源可访问，非回环返回 403。`/health` 响应仅 `{"status":"UP","timestamp":"..."}`；`/ready` 以轻量查询检查 MySQL 可用性，探测上限 2 秒，成功 `200 {"status":"UP"}`、不可用或超时 `503 {"status":"DOWN"}`，响应不含连接串、主机名、异常堆栈或驱动版本。桌面端先查 `/health` 再查 `/ready`；`/v3/api-docs` 职责不变。
 - **认证**：复用 Phase 0 的 `POST /api/v1/auth/login`（Bearer 令牌，默认 7 天有效），桌面端由主进程持令牌并用 Electron `safeStorage` 持久化，Renderer 不接触长期令牌；接口契约提案详见 Phase 1.2 首批交付汇报。
 
 ## 三、验证与提交约定

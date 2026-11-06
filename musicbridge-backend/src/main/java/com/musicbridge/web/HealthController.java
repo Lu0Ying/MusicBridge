@@ -28,16 +28,10 @@ public class HealthController {
     @GetMapping("/health")
     @Operation(summary = "本机健康检查，仅允许回环地址访问")
     public HealthResponse health(HttpServletRequest request) {
-        if (!isLoopback(request.getRemoteAddr())) {
+        if (!LoopbackAccess.isLoopback(request.getRemoteAddr())) {
             throw new AccessForbiddenException("仅允许本机访问");
         }
         return new HealthResponse("UP", Instant.now(clock));
-    }
-
-    private boolean isLoopback(String remoteAddr) {
-        return "127.0.0.1".equals(remoteAddr)
-                || "::1".equals(remoteAddr)
-                || "0:0:0:0:0:0:0:1".equals(remoteAddr);
     }
 
     public record HealthResponse(String status, Instant timestamp) {
